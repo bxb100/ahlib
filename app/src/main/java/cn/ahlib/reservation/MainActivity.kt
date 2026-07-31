@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
                 ReservationApp(
                     viewModel = reservationViewModel,
                     automationManager = application.automationManager,
+                    appUpdateManager = application.appUpdateManager,
                 )
             }
         }

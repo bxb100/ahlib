@@ -34,6 +34,7 @@ import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -73,6 +74,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -547,6 +549,9 @@ fun ScannerScreen(
     var imageScanError by remember {
         mutableStateOf<QrImageScanError?>(null)
     }
+    var cameraScanError by remember {
+        mutableStateOf<QrScannerError?>(null)
+    }
     var imageScanJob by remember { mutableStateOf<Job?>(null) }
     val imageHistoryStore = remember(context) {
         QrImageHistoryStore(context)
@@ -562,6 +567,7 @@ fun ScannerScreen(
         imageScanJob?.cancel()
         imageScanJob = coroutineScope.launch {
             imageScanError = null
+            cameraScanError = null
             activeImageUriString = uri.toString()
             isImageScanning = true
             try {
@@ -635,12 +641,17 @@ fun ScannerScreen(
         operationActive ||
             isImageScanning ||
             isImagePickerOpen ||
-            imageScanError != null
+            imageScanError != null ||
+            cameraScanError != null
     val imageErrorText = imageScanError?.let { error ->
         stringResource(error.messageResource())
     }
+    val cameraErrorText = cameraScanError?.let { error ->
+        stringResource(error.messageResource())
+    }
     val showFeedback =
-        operationActive || isImageScanning || imageErrorText != null || feedbackText != null
+        operationActive || isImageScanning || imageErrorText != null ||
+            cameraErrorText != null || feedbackText != null
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -674,7 +685,10 @@ fun ScannerScreen(
                             }
                         }
                     },
-                    onError = onScannerError,
+                    onError = { error ->
+                        cameraScanError = error
+                        onScannerError(error)
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
             }
@@ -764,117 +778,135 @@ fun ScannerScreen(
             }
         }
 
-        if (imageHistory.isNotEmpty() && !showFeedback) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(MaterialTheme.spacing.screen)
-                    .fillMaxWidth(),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
-            ) {
-                Column(
-                    modifier = Modifier.padding(
-                        horizontal = MaterialTheme.spacing.large,
-                        vertical = MaterialTheme.spacing.medium,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        // The feedback card is stacked above the recent-image strip so a
+        // prompt can never be covered by (or hide) the history panel.
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(MaterialTheme.spacing.screen)
+                .fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+        ) {
+            if (showFeedback) {
+                Surface(
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
                 ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
+                    Column(
+                        modifier = Modifier.padding(MaterialTheme.spacing.extraLarge),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = stringResource(
-                                    R.string.scanner_image_history_title,
-                                ),
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                text = stringResource(
-                                    R.string.scanner_image_history_hint,
-                                ),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
+                        if (operationActive || isImageScanning) {
+                            CircularProgressIndicator()
                         }
-                        TextButton(
-                            onClick = {
-                                imageHistoryStore.clear()
-                                imageHistory = emptyList()
+                        Text(
+                            text = when {
+                                isImageScanning -> {
+                                    stringResource(R.string.scanner_image_processing)
+                                }
+                                isChecking -> stringResource(R.string.scanner_checking)
+                                isLocating -> stringResource(R.string.locating)
+                                isSigningIn -> stringResource(R.string.signing_in)
+                                isSigningOut -> stringResource(R.string.signing_out)
+                                imageErrorText != null -> imageErrorText
+                                cameraErrorText != null -> cameraErrorText
+                                else -> feedbackText.orEmpty()
                             },
-                            enabled = !isImagePickerOpen,
-                        ) {
-                            Text(stringResource(R.string.clear_history))
+                            style = MaterialTheme.typography.bodyLarge,
+                        )
+                        when {
+                            operationActive || isImageScanning -> Unit
+
+                            cameraScanError != null -> {
+                                Button(onClick = { cameraScanError = null }) {
+                                    Text(stringResource(R.string.scan_again))
+                                }
+                            }
+
+                            imageScanError != null -> {
+                                if (hasCameraPermission) {
+                                    Button(
+                                        onClick = {
+                                            imageScanError = null
+                                            onScanAgain()
+                                        },
+                                    ) {
+                                        Text(
+                                            stringResource(
+                                                R.string.scanner_continue_camera,
+                                            ),
+                                        )
+                                    }
+                                }
+                            }
+
+                            feedbackText != null -> {
+                                Button(onClick = onScanAgain) {
+                                    Text(stringResource(R.string.scan_another))
+                                }
+                            }
+
+                            else -> Unit
                         }
                     }
-                    ScannerImageHistory(
-                        entries = imageHistory,
-                        activeUriString = activeImageUriString,
-                        enabled = !isImagePickerOpen,
-                        onEntryClick = { entry ->
-                            scanImage(entry.uriString.toUri())
-                        },
-                    )
                 }
             }
-        }
 
-        if (showFeedback) {
-            Surface(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(MaterialTheme.spacing.extraLarge),
-                shape = MaterialTheme.shapes.extraLarge,
-                color = MaterialTheme.colorScheme.surfaceContainerHigh,
-            ) {
-                Column(
-                    modifier = Modifier.padding(MaterialTheme.spacing.extraLarge),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
+            if (imageHistory.isNotEmpty()) {
+                val historyEnabled =
+                    !isImagePickerOpen && !isImageScanning && !operationActive
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = MaterialTheme.shapes.extraLarge,
+                    color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
                 ) {
-                    if (operationActive || isImageScanning) {
-                        CircularProgressIndicator()
-                    }
-                    Text(
-                        text = when {
-                            isImageScanning -> {
-                                stringResource(R.string.scanner_image_processing)
-                            }
-                            isChecking -> stringResource(R.string.scanner_checking)
-                            isLocating -> stringResource(R.string.locating)
-                            isSigningIn -> stringResource(R.string.signing_in)
-                            isSigningOut -> stringResource(R.string.signing_out)
-                            imageErrorText != null -> imageErrorText
-                            else -> feedbackText.orEmpty()
-                        },
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                    if (
-                        !operationActive &&
-                        !isImageScanning &&
-                        imageScanError != null &&
-                        hasCameraPermission
+                    Column(
+                        modifier = Modifier.padding(
+                            horizontal = MaterialTheme.spacing.large,
+                            vertical = MaterialTheme.spacing.medium,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
                     ) {
-                        Button(
-                            onClick = {
-                                imageScanError = null
-                                onScanAgain()
-                            },
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Text(stringResource(R.string.scanner_continue_camera))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = stringResource(
+                                        R.string.scanner_image_history_title,
+                                    ),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold,
+                                )
+                                Text(
+                                    text = stringResource(
+                                        R.string.scanner_image_history_hint,
+                                    ),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            TextButton(
+                                onClick = {
+                                    imageHistoryStore.clear()
+                                    imageHistory = emptyList()
+                                },
+                                enabled = historyEnabled,
+                            ) {
+                                Text(stringResource(R.string.clear_history))
+                            }
                         }
-                    } else if (
-                        !operationActive &&
-                        !isImageScanning &&
-                        imageScanError == null &&
-                        feedbackText != null
-                    ) {
-                        Button(onClick = onScanAgain) {
-                            Text(stringResource(R.string.scan_another))
-                        }
+                        ScannerImageHistory(
+                            entries = imageHistory,
+                            activeUriString = activeImageUriString,
+                            enabled = historyEnabled,
+                            onEntryClick = { entry ->
+                                scanImage(entry.uriString.toUri())
+                            },
+                        )
                     }
                 }
             }
@@ -948,13 +980,16 @@ fun ProfileScreen(
     readerId: String,
     readerQrImageUrl: String?,
     readerQrPageUrl: String,
+    appVersionName: String,
     isSavingReaderQr: Boolean,
+    isCheckingUpdate: Boolean,
     readerQrErrorText: String?,
     isLoggingOut: Boolean,
     onReaderQrPageUrlChange: (String) -> Unit,
     onSaveReaderQrPageUrl: () -> Unit,
     onClearReaderQrBinding: () -> Unit,
     onOpenAutomation: () -> Unit,
+    onCheckUpdate: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1067,6 +1102,29 @@ fun ProfileScreen(
                 Text(stringResource(R.string.automation_settings_title))
             }
         }
+        item(key = "app-update") {
+            FilledTonalButton(
+                onClick = onCheckUpdate,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !isCheckingUpdate,
+            ) {
+                if (isCheckingUpdate) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(stringResource(R.string.app_update_checking))
+                } else {
+                    Icon(
+                        imageVector = Icons.Outlined.SystemUpdate,
+                        contentDescription = null,
+                    )
+                    Spacer(modifier = Modifier.size(8.dp))
+                    Text(stringResource(R.string.app_update_check))
+                }
+            }
+        }
         item(key = "logout") {
             OutlinedButton(
                 onClick = { showLogoutDialog = true },
@@ -1095,6 +1153,18 @@ fun ProfileScreen(
                     Text(stringResource(R.string.logout))
                 }
             }
+        }
+        item(key = "app-version") {
+            Text(
+                text = stringResource(
+                    R.string.app_update_current_version,
+                    appVersionName,
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 

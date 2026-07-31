@@ -2,24 +2,13 @@ package cn.ahlib.reservation.scanner
 
 import android.graphics.Bitmap
 import androidx.annotation.StringRes
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Button
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.unit.dp
 import cn.ahlib.reservation.R
 
 sealed interface QrScannerError {
@@ -28,6 +17,12 @@ sealed interface QrScannerError {
     data class CameraFailure(val cause: Throwable) : QrScannerError
 }
 
+/**
+ * Camera preview that detects and parses reservation QR codes. Scanning
+ * pauses after every detection or camera failure; errors are surfaced only
+ * through [onError] so the caller can present them without being covered by
+ * other overlays. Toggling [enabled] resumes a paused scanner.
+ */
 @Composable
 fun QrCodeScanner(
     enabled: Boolean,
@@ -36,85 +31,37 @@ fun QrCodeScanner(
     onError: (QrScannerError) -> Unit = {},
 ) {
     var isPaused by remember { mutableStateOf(false) }
-    var scannerError by remember { mutableStateOf<QrScannerError?>(null) }
 
     LaunchedEffect(enabled) {
         isPaused = false
-        scannerError = null
     }
 
-    Box(modifier = modifier) {
-        QrCameraPreview(
-            enabled = enabled && !isPaused,
-            onQrCodeDetected = { rawValue, capturedImage ->
-                isPaused = true
-                when (val result = QrCodeParser.parse(rawValue)) {
-                    is QrCodeParseResult.Success ->
-                        onScan(result.code, capturedImage)
+    QrCameraPreview(
+        enabled = enabled && !isPaused,
+        onQrCodeDetected = { rawValue, capturedImage ->
+            isPaused = true
+            when (val result = QrCodeParser.parse(rawValue)) {
+                is QrCodeParseResult.Success ->
+                    onScan(result.code, capturedImage)
 
-                    is QrCodeParseResult.Failure -> {
-                        capturedImage?.recycle()
-                        val error = QrScannerError.InvalidCode(result.error)
-                        scannerError = error
-                        onError(error)
-                    }
+                is QrCodeParseResult.Failure -> {
+                    capturedImage?.recycle()
+                    onError(QrScannerError.InvalidCode(result.error))
                 }
-            },
-            modifier = Modifier.matchParentSize(),
-            onError = { cause ->
-                if (!isPaused) {
-                    isPaused = true
-                    val error = QrScannerError.CameraFailure(cause)
-                    scannerError = error
-                    onError(error)
-                }
-            },
-        )
-
-        scannerError?.let { error ->
-            ScannerErrorCard(
-                error = error,
-                onRetry = {
-                    scannerError = null
-                    isPaused = false
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(24.dp),
-            )
-        }
-    }
-}
-
-@Composable
-private fun ScannerErrorCard(
-    error: QrScannerError,
-    onRetry: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        modifier = modifier,
-        shape = MaterialTheme.shapes.medium,
-        tonalElevation = 6.dp,
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Text(
-                text = stringResource(error.messageResource()),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Button(onClick = onRetry) {
-                Text(stringResource(R.string.scan_again))
             }
-        }
-    }
+        },
+        modifier = modifier,
+        onError = { cause ->
+            if (!isPaused) {
+                isPaused = true
+                onError(QrScannerError.CameraFailure(cause))
+            }
+        },
+    )
 }
 
 @StringRes
-private fun QrScannerError.messageResource(): Int = when (this) {
+internal fun QrScannerError.messageResource(): Int = when (this) {
     is QrScannerError.CameraFailure -> R.string.scanner_error_camera
     is QrScannerError.InvalidCode -> reason.messageResource()
 }

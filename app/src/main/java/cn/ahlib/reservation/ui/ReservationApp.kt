@@ -52,10 +52,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import cn.ahlib.reservation.BuildConfig
 import cn.ahlib.reservation.R
 import cn.ahlib.reservation.automation.AUTOMATION_TIME_ZONE
 import cn.ahlib.reservation.automation.AutomationManager
 import cn.ahlib.reservation.calendar.ReservationCalendarReminder
+import cn.ahlib.reservation.update.AppUpdateManager
+import cn.ahlib.reservation.update.UpdateNotice
 import java.text.DateFormat
 import java.util.Date
 
@@ -63,9 +66,11 @@ import java.util.Date
 fun ReservationApp(
     viewModel: ReservationViewModel,
     automationManager: AutomationManager,
+    appUpdateManager: AppUpdateManager,
     modifier: Modifier = Modifier,
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val updateState by appUpdateManager.state.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
     val messageText = state.message?.text?.resolve()
     val context = LocalContext.current
@@ -79,6 +84,18 @@ fun ReservationApp(
         val resolved = messageText ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(resolved)
         viewModel.consumeMessage(message.id)
+    }
+    LaunchedEffect(Unit) {
+        appUpdateManager.checkForUpdates(userInitiated = false)
+    }
+    LaunchedEffect(updateState.notice) {
+        val notice = updateState.notice ?: return@LaunchedEffect
+        val messageRes = when (notice) {
+            UpdateNotice.UP_TO_DATE -> R.string.app_update_up_to_date
+            UpdateNotice.CHECK_FAILED -> R.string.app_update_check_failed
+        }
+        Toast.makeText(context, messageRes, Toast.LENGTH_SHORT).show()
+        appUpdateManager.consumeNotice()
     }
     Box(modifier = modifier.fillMaxSize()) {
         when (state.stage) {
@@ -145,6 +162,10 @@ fun ReservationApp(
                 state = state,
                 viewModel = viewModel,
                 automationManager = automationManager,
+                isCheckingUpdate = updateState.isChecking,
+                onCheckUpdate = {
+                    appUpdateManager.checkForUpdates(userInitiated = true)
+                },
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -178,6 +199,15 @@ fun ReservationApp(
             onDismiss = {
                 automationManager.dismissCalendarReminder(reminder.id)
             },
+        )
+    }
+
+    updateState.dialog?.let { updateDialog ->
+        AppUpdateDialog(
+            dialogState = updateDialog,
+            onStartDownload = appUpdateManager::startDownload,
+            onInstall = appUpdateManager::installReadyApk,
+            onDismiss = appUpdateManager::dismissDialog,
         )
     }
 }
@@ -256,6 +286,8 @@ private fun AuthenticatedContent(
     state: ReservationUiState,
     viewModel: ReservationViewModel,
     automationManager: AutomationManager,
+    isCheckingUpdate: Boolean,
+    onCheckUpdate: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -488,13 +520,16 @@ private fun AuthenticatedContent(
                 readerId = state.login.readerId,
                 readerQrImageUrl = state.readerQrCode.imageUrl,
                 readerQrPageUrl = state.readerQrCode.pageUrlInput,
+                appVersionName = BuildConfig.VERSION_NAME,
                 isSavingReaderQr = state.readerQrCode.isSaving,
+                isCheckingUpdate = isCheckingUpdate,
                 readerQrErrorText = state.readerQrCode.error?.resolve(),
                 isLoggingOut = state.isLoggingOut,
                 onReaderQrPageUrlChange = viewModel::updateReaderQrPageUrl,
                 onSaveReaderQrPageUrl = viewModel::saveReaderQrPageUrl,
                 onClearReaderQrBinding = viewModel::clearReaderQrCodeBinding,
                 onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
+                onCheckUpdate = onCheckUpdate,
                 onLogout = viewModel::logout,
                 modifier = contentModifier,
             )

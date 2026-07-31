@@ -13,3 +13,7 @@ captures/
 *.keystore
 *.p12
 *.pfx
+
+# Keep test sources tracked even when a machine-wide gitignore excludes
+# paths named "test".
+!app/src/test/

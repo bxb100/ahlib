@@ -245,4 +245,20 @@
     <string name="clear_logs">\u6e05\u7a7a\u65e5\u5fd7</string>
     <string name="automation_logs_empty">\u6682\u65e0\u81ea\u52a8\u5316\u65e5\u5fd7</string>
     <string name="automation_logs_notice">\u4ec5\u4fdd\u7559\u5f53\u524d\u8fdb\u7a0b\u6700\u8fd1 %1$d \u6761\u65e5\u5fd7\uff0c\u8d85\u51fa\u540e\u81ea\u52a8\u79fb\u9664\u6700\u65e7\u8bb0\u5f55\uff1b\u8fdb\u7a0b\u7ed3\u675f\u540e\u4f1a\u6e05\u7a7a\u3002</string>
+    <string name="app_update_check">\u68c0\u67e5\u66f4\u65b0</string>
+    <string name="app_update_checking">\u6b63\u5728\u68c0\u67e5\u66f4\u65b0\u2026</string>
+    <string name="app_update_current_version">\u5f53\u524d\u7248\u672c %1$s</string>
+    <string name="app_update_available_title">\u53d1\u73b0\u65b0\u7248\u672c %1$s</string>
+    <string name="app_update_size">\u5b89\u88c5\u5305\u5927\u5c0f\uff1a%1$s</string>
+    <string name="app_update_notes_empty">\u6682\u65e0\u66f4\u65b0\u8bf4\u660e</string>
+    <string name="app_update_download">\u7acb\u5373\u66f4\u65b0</string>
+    <string name="app_update_later">\u7a0d\u540e</string>
+    <string name="app_update_downloading">\u6b63\u5728\u4e0b\u8f7d\u66f4\u65b0\u2026</string>
+    <string name="app_update_downloading_percent">\u6b63\u5728\u4e0b\u8f7d\u66f4\u65b0\u2026%1$d%%</string>
+    <string name="app_update_cancel_download">\u53d6\u6d88\u4e0b\u8f7d</string>
+    <string name="app_update_ready">\u65b0\u7248\u672c\u5df2\u4e0b\u8f7d\u5b8c\u6210\uff0c\u70b9\u51fb\u5b89\u88c5\u5e76\u6309\u7cfb\u7edf\u63d0\u793a\u5b8c\u6210\u66f4\u65b0</string>
+    <string name="app_update_install">\u5b89\u88c5</string>
+    <string name="app_update_failed">\u66f4\u65b0\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5</string>
+    <string name="app_update_up_to_date">\u5f53\u524d\u5df2\u662f\u6700\u65b0\u7248\u672c</string>
+    <string name="app_update_check_failed">\u68c0\u67e5\u66f4\u65b0\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5</string>
 </resources>
