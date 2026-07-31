@@ -7,6 +7,7 @@ data class Captcha(
 
 data class UserInfo(
     val id: String = "",
+    val readerId: String? = null,
     val token: String? = null,
     val name: String? = null,
     val mobile: String? = null,

@@ -31,7 +31,6 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -61,6 +60,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -100,7 +100,6 @@ import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -127,29 +126,33 @@ fun ReservationsScreen(
         selectedFilter == ReservationFilter.ALL || record.isPendingCheckIn()
     }
     val listState = rememberLazyListState()
+    val latestCanLoadMore by rememberUpdatedState(canLoadMore)
+    val latestOnLoadMore by rememberUpdatedState(onLoadMore)
 
     LaunchedEffect(selectedFilter) {
         listState.scrollToItem(0)
     }
-    LaunchedEffect(
-        listState,
-        canLoadMore,
-        isLoading,
-        isLoadingMore,
-    ) {
+    LaunchedEffect(listState) {
+        var loadedDuringCurrentScroll = false
         snapshotFlow {
             val layoutInfo = listState.layoutInfo
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-            canLoadMore &&
-                !isLoading &&
-                !isLoadingMore &&
-                layoutInfo.totalItemsCount > 0 &&
-                lastVisibleIndex >= layoutInfo.totalItemsCount - 2
+            ReservationLoadMoreObservation(
+                isScrollInProgress = listState.isScrollInProgress,
+                canLoadMore = latestCanLoadMore,
+                totalItemsCount = layoutInfo.totalItemsCount,
+                lastVisibleIndex =
+                    layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1,
+            )
         }
-            .distinctUntilChanged()
-            .collect { shouldLoadMore ->
-                if (shouldLoadMore) {
-                    onLoadMore()
+            .collect { observation ->
+                if (!observation.isScrollInProgress) {
+                    loadedDuringCurrentScroll = false
+                } else if (
+                    !loadedDuringCurrentScroll &&
+                    observation.shouldLoadMore()
+                ) {
+                    loadedDuringCurrentScroll = true
+                    latestOnLoadMore()
                 }
             }
     }
@@ -316,6 +319,19 @@ fun ReservationsScreen(
         )
     }
 }
+
+private data class ReservationLoadMoreObservation(
+    val isScrollInProgress: Boolean,
+    val canLoadMore: Boolean,
+    val totalItemsCount: Int,
+    val lastVisibleIndex: Int,
+)
+
+private fun ReservationLoadMoreObservation.shouldLoadMore(): Boolean =
+    isScrollInProgress &&
+        canLoadMore &&
+        totalItemsCount > 0 &&
+        lastVisibleIndex >= totalItemsCount - 2
 
 private fun ReservationFilter.labelResource(): Int = when (this) {
     ReservationFilter.PENDING_CHECK_IN -> R.string.reservation_filter_pending
@@ -923,13 +939,52 @@ private fun ScannerImageHistory(
 @Composable
 fun ProfileScreen(
     profile: UserInfo?,
+    readerId: String,
+    readerQrImageUrl: String?,
+    readerQrPageUrl: String,
+    isSavingReaderQr: Boolean,
+    readerQrErrorText: String?,
     isLoggingOut: Boolean,
+    onReaderQrPageUrlChange: (String) -> Unit,
+    onSaveReaderQrPageUrl: () -> Unit,
+    onClearReaderQrBinding: () -> Unit,
     onOpenAutomation: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
+    var showReaderQrEditor by rememberSaveable { mutableStateOf(false) }
+    var wasSavingReaderQr by remember { mutableStateOf(false) }
     val missingValue = stringResource(R.string.not_provided)
+    val readerStatusResource = readerStatusLabelResource(profile?.readerStatus)
+    val readerStatusValue = if (readerStatusResource != null) {
+        stringResource(readerStatusResource)
+    } else {
+        profile?.readerStatus
+            ?.trim()
+            ?.takeIf(String::isNotBlank)
+            ?: missingValue
+    }
+    val normalizedReaderId = readerId.trim()
+    val readerIdValue = normalizedReaderId
+        .takeIf(String::isNotEmpty)
+        ?: missingValue
+
+    LaunchedEffect(
+        isSavingReaderQr,
+        readerQrImageUrl,
+        readerQrErrorText,
+    ) {
+        if (
+            wasSavingReaderQr &&
+            !isSavingReaderQr &&
+            readerQrImageUrl != null &&
+            readerQrErrorText == null
+        ) {
+            showReaderQrEditor = false
+        }
+        wasSavingReaderQr = isSavingReaderQr
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -952,52 +1007,44 @@ fun ProfileScreen(
                     verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
                 ) {
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(
+                            MaterialTheme.spacing.large,
+                        ),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Surface(
-                            modifier = Modifier.size(52.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(
+                                MaterialTheme.spacing.large,
+                            ),
                         ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Person,
-                                    contentDescription = null,
-                                )
-                            }
+                            LabeledValue(
+                                label = stringResource(R.string.mobile),
+                                value = profile?.mobile
+                                    ?.takeIf(String::isNotBlank)
+                                    ?: missingValue,
+                            )
+                            LabeledValue(
+                                label = stringResource(R.string.reader_card),
+                                value = readerIdValue,
+                            )
+                            LabeledValue(
+                                label = stringResource(R.string.reader_status),
+                                value = readerStatusValue,
+                            )
                         }
-                        Text(
-                            text = profile?.name
-                                ?.takeIf(String::isNotBlank)
-                                ?: stringResource(R.string.reader_profile),
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                        )
+                        if (readerQrImageUrl == null) {
+                            ReaderQrCodeUnbound(
+                                onClick = { showReaderQrEditor = true },
+                            )
+                        } else {
+                            ReaderQrCodeImage(
+                                imageUrl = readerQrImageUrl,
+                                onClearBinding = onClearReaderQrBinding,
+                            )
+                        }
                     }
-                    HorizontalDivider()
-                    LabeledValue(
-                        label = stringResource(R.string.name),
-                        value = profile?.name?.takeIf(String::isNotBlank) ?: missingValue,
-                    )
-                    LabeledValue(
-                        label = stringResource(R.string.mobile),
-                        value = profile?.mobile?.takeIf(String::isNotBlank) ?: missingValue,
-                    )
-                    LabeledValue(
-                        label = stringResource(R.string.reader_card),
-                        value = profile?.idCard
-                            ?.takeIf(String::isNotBlank)
-                            ?: profile?.id?.takeIf(String::isNotBlank)
-                            ?: missingValue,
-                    )
-                    LabeledValue(
-                        label = stringResource(R.string.reader_status),
-                        value = profile?.readerStatus
-                            ?.takeIf(String::isNotBlank)
-                            ?: missingValue,
-                    )
                 }
             }
         }
@@ -1045,6 +1092,17 @@ fun ProfileScreen(
         }
     }
 
+    if (showReaderQrEditor) {
+        ReaderQrBindingDialog(
+            pageUrl = readerQrPageUrl,
+            isSaving = isSavingReaderQr,
+            errorText = readerQrErrorText,
+            onPageUrlChange = onReaderQrPageUrlChange,
+            onSave = onSaveReaderQrPageUrl,
+            onDismiss = { showReaderQrEditor = false },
+        )
+    }
+
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = {
@@ -1076,3 +1134,13 @@ fun ProfileScreen(
         )
     }
 }
+
+internal fun readerStatusLabelResource(readerStatus: String?): Int? =
+    when (readerStatus?.trim()) {
+        "1" -> R.string.reader_status_valid
+        "2" -> R.string.reader_status_verifying
+        "3" -> R.string.reader_status_lost
+        "4" -> R.string.reader_status_suspended
+        "5" -> R.string.reader_status_cancelled
+        else -> null
+    }

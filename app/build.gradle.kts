@@ -36,6 +36,7 @@ android {
 
     buildTypes {
         debug {
+            applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
             val debugApiBaseUrl = providers.gradleProperty("debugApiBaseUrl")
                 .orElse(productionApiBaseUrl)

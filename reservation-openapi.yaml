@@ -682,6 +682,9 @@ components:
       properties:
         id:
           type: string
+        readerId:
+          type: string
+          description: Reader card number used to sign in.
         token:
           type: string
           description: Token stored by the bundled client as `pc_token`.

@@ -18,6 +18,8 @@ class MainActivity : ComponentActivity() {
             val reservationViewModel: ReservationViewModel = viewModel(
                 factory = ReservationViewModel.Factory(
                     repository = application.appContainer.repository,
+                    readerQrCodeRepository =
+                        application.appContainer.readerQrCodeRepository,
                     locationProvider = application.locationProvider,
                     shouldUseMockLocation =
                         application.automationManager::shouldUseMockLocation,

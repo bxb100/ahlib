@@ -9,9 +9,11 @@ import retrofit2.converter.gson.GsonConverterFactory
 
 class AppContainer(context: Context) {
     val repository: ReservationRepository
+    val readerQrCodeRepository: ReaderQrCodeRepository
 
     init {
         clearDeprecatedReaderAccountHistory(context.applicationContext)
+        readerQrCodeRepository = ReaderQrCodeRepository(context.applicationContext)
         val gson = GsonFactory.create()
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
         val okHttpClient = OkHttpClient.Builder()

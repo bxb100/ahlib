@@ -478,7 +478,15 @@ private fun AuthenticatedContent(
 
             AuthenticatedTab.PROFILE -> ProfileScreen(
                 profile = state.profile,
+                readerId = state.login.readerId,
+                readerQrImageUrl = state.readerQrCode.imageUrl,
+                readerQrPageUrl = state.readerQrCode.pageUrlInput,
+                isSavingReaderQr = state.readerQrCode.isSaving,
+                readerQrErrorText = state.readerQrCode.error?.resolve(),
                 isLoggingOut = state.isLoggingOut,
+                onReaderQrPageUrlChange = viewModel::updateReaderQrPageUrl,
+                onSaveReaderQrPageUrl = viewModel::saveReaderQrPageUrl,
+                onClearReaderQrBinding = viewModel::clearReaderQrCodeBinding,
                 onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
                 onLogout = viewModel::logout,
                 modifier = contentModifier,

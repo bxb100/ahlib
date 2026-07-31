@@ -666,7 +666,6 @@ private fun ReservationAvailabilitySection(
             .padding(horizontal = MaterialTheme.spacing.screen),
         verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
     ) {
-        SectionHeader(title = stringResource(R.string.room_availability))
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = MaterialTheme.shapes.extraLarge,

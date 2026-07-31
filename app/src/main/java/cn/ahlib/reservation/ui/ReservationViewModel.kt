@@ -15,6 +15,9 @@ import cn.ahlib.reservation.data.AvailabilitySlot
 import cn.ahlib.reservation.data.Captcha
 import cn.ahlib.reservation.data.Category
 import cn.ahlib.reservation.data.CreateReservationRequest
+import cn.ahlib.reservation.data.ReaderQrCodeFailure
+import cn.ahlib.reservation.data.ReaderQrCodeRepository
+import cn.ahlib.reservation.data.ReaderQrCodeResult
 import cn.ahlib.reservation.data.ReservationRepository
 import cn.ahlib.reservation.data.RoomDetail
 import cn.ahlib.reservation.data.RoomSignOffRequest
@@ -220,6 +223,13 @@ data class ScannerUiState(
         get() = phase == ScannerPhase.SCANNING
 }
 
+data class ReaderQrCodeUiState(
+    val imageUrl: String? = null,
+    val pageUrlInput: String = "",
+    val isSaving: Boolean = false,
+    val error: UiText? = null,
+)
+
 data class ReservationUiState(
     val stage: AppStage = AppStage.STARTUP,
     val isStartupLoading: Boolean = true,
@@ -234,6 +244,7 @@ data class ReservationUiState(
     val booking: BookingUiState = BookingUiState(),
     val reservationList: ReservationListUiState = ReservationListUiState(),
     val scanner: ScannerUiState = ScannerUiState(),
+    val readerQrCode: ReaderQrCodeUiState = ReaderQrCodeUiState(),
     val message: UiMessage? = null,
 )
 
@@ -304,6 +315,7 @@ private fun AppointmentRecord.reservationStartTimeForSorting(): LocalTime? {
 
 class ReservationViewModel(
     private val repository: ReservationRepository,
+    private val readerQrCodeRepository: ReaderQrCodeRepository,
     private val locationProvider: DeviceLocationProvider,
     private val shouldUseMockLocation: () -> Boolean,
     private val queueCalendarReminder: (
@@ -322,6 +334,7 @@ class ReservationViewModel(
     private var detailRequestId = 0L
     private var reservationRequestId = 0L
     private var scannerRequestId = 0L
+    private var readerQrRequestId = 0L
 
     private var startupJob: Job? = null
     private var loginCaptchaJob: Job? = null
@@ -336,6 +349,7 @@ class ReservationViewModel(
     private var reservationsJob: Job? = null
     private val cancellationJobs = mutableMapOf<String, Job>()
     private var scannerJob: Job? = null
+    private var readerQrCodeJob: Job? = null
     private var logoutJob: Job? = null
 
     init {
@@ -430,6 +444,106 @@ class ReservationViewModel(
     fun updateReaderId(value: String) {
         _uiState.update { state ->
             state.copy(login = state.login.copy(readerId = value, error = null))
+        }
+    }
+
+    fun updateReaderQrPageUrl(value: String) {
+        _uiState.update { state ->
+            state.copy(
+                readerQrCode = state.readerQrCode.copy(
+                    pageUrlInput = value,
+                    error = null,
+                ),
+            )
+        }
+    }
+
+    fun saveReaderQrPageUrl() {
+        val state = _uiState.value
+        if (
+            state.stage != AppStage.AUTHENTICATED ||
+            state.readerQrCode.isSaving
+        ) {
+            return
+        }
+        val readerId = state.login.readerId.trim()
+        val pageUrl = state.readerQrCode.pageUrlInput.trim()
+        if (readerId.isEmpty() || pageUrl.isEmpty()) {
+            _uiState.update { current ->
+                current.copy(
+                    readerQrCode = current.readerQrCode.copy(
+                        error = UiText.Resource(R.string.reader_qr_error_invalid_url),
+                    ),
+                )
+            }
+            return
+        }
+
+        readerQrCodeJob?.cancel()
+        val requestId = ++readerQrRequestId
+        _uiState.update { current ->
+            current.copy(
+                readerQrCode = current.readerQrCode.copy(
+                    isSaving = true,
+                    error = null,
+                ),
+            )
+        }
+        readerQrCodeJob = viewModelScope.launch {
+            when (
+                val result = readerQrCodeRepository.resolveAndCache(
+                    readerId = readerId,
+                    pageUrl = pageUrl,
+                )
+            ) {
+                is ReaderQrCodeResult.Success -> {
+                    if (requestId != readerQrRequestId) {
+                        return@launch
+                    }
+                    _uiState.update { current ->
+                        current.copy(
+                            readerQrCode = ReaderQrCodeUiState(
+                                imageUrl = result.imageUrl,
+                            ),
+                            message = newMessage(R.string.reader_qr_saved),
+                        )
+                    }
+                }
+
+                is ReaderQrCodeResult.Failure -> {
+                    if (requestId != readerQrRequestId) {
+                        return@launch
+                    }
+                    _uiState.update { current ->
+                        current.copy(
+                            readerQrCode = current.readerQrCode.copy(
+                                isSaving = false,
+                                error = result.reason.toUiText(),
+                            ),
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearReaderQrCodeBinding() {
+        val state = _uiState.value
+        if (state.stage != AppStage.AUTHENTICATED) {
+            return
+        }
+        val readerId = state.login.readerId.trim()
+        if (readerId.isEmpty()) {
+            return
+        }
+        readerQrRequestId++
+        readerQrCodeJob?.cancel()
+        readerQrCodeRepository.clearCachedImageUrl(readerId)
+        _uiState.update { current ->
+            current.copy(
+                readerQrCode = ReaderQrCodeUiState(),
+                message = newMessage(R.string.reader_qr_cleared),
+            )
         }
     }
 
@@ -1483,11 +1597,16 @@ class ReservationViewModel(
 
     private fun beginPhoneBinding(profile: UserInfo) {
         cancelAuthenticatedJobs()
+        val readerId = profile.readerId
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: _uiState.value.login.readerId
         _uiState.value = ReservationUiState(
             stage = AppStage.PHONE_BINDING,
             isStartupLoading = false,
             profile = profile,
             login = _uiState.value.login.copy(
+                readerId = readerId,
                 password = "",
                 verifyCode = "",
                 isSubmitting = false,
@@ -1505,12 +1624,19 @@ class ReservationViewModel(
         loginCaptchaJob?.cancel()
         phoneCaptchaJob?.cancel()
         smsCountdownJob?.cancel()
+        val readerId = profile.readerId
+            ?.trim()
+            ?.takeIf(String::isNotEmpty)
+            ?: _uiState.value.login.readerId
         _uiState.value = ReservationUiState(
             stage = AppStage.AUTHENTICATED,
             isStartupLoading = false,
             profile = profile,
             selectedTab = AuthenticatedTab.ROOMS,
-            login = LoginUiState(readerId = _uiState.value.login.readerId),
+            login = LoginUiState(readerId = readerId),
+            readerQrCode = ReaderQrCodeUiState(
+                imageUrl = readerQrCodeRepository.cachedImageUrl(readerId),
+            ),
             message = messageId?.let(::newMessage),
         )
         loadRooms(reset = true)
@@ -2160,6 +2286,8 @@ class ReservationViewModel(
         phoneSmsJob?.cancel()
         smsCountdownJob?.cancel()
         phoneUpdateJob?.cancel()
+        readerQrRequestId++
+        readerQrCodeJob?.cancel()
         cancelAuthenticatedJobs()
     }
 
@@ -2185,6 +2313,18 @@ class ReservationViewModel(
             ?: UiText.Resource(R.string.error_unknown)
     }
 
+    private fun ReaderQrCodeFailure.toUiText(): UiText =
+        UiText.Resource(
+            when (this) {
+                ReaderQrCodeFailure.INVALID_PAGE_URL ->
+                    R.string.reader_qr_error_invalid_url
+                ReaderQrCodeFailure.NETWORK -> R.string.reader_qr_error_network
+                ReaderQrCodeFailure.HTTP -> R.string.reader_qr_error_http
+                ReaderQrCodeFailure.QR_IMAGE_NOT_FOUND ->
+                    R.string.reader_qr_error_not_found
+            },
+        )
+
     private fun appendDistinctRooms(
         current: List<RoomSummary>,
         next: List<RoomSummary>,
@@ -2209,6 +2349,7 @@ class ReservationViewModel(
 
     class Factory(
         private val repository: ReservationRepository,
+        private val readerQrCodeRepository: ReaderQrCodeRepository,
         private val locationProvider: DeviceLocationProvider,
         private val shouldUseMockLocation: () -> Boolean,
         private val queueCalendarReminder: (
@@ -2223,6 +2364,7 @@ class ReservationViewModel(
             if (modelClass.isAssignableFrom(ReservationViewModel::class.java)) {
                 return ReservationViewModel(
                     repository = repository,
+                    readerQrCodeRepository = readerQrCodeRepository,
                     locationProvider = locationProvider,
                     shouldUseMockLocation = shouldUseMockLocation,
                     queueCalendarReminder = queueCalendarReminder,
