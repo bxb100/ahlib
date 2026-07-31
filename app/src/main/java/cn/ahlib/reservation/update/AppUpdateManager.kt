@@ -88,6 +88,9 @@ class AppUpdateManager(
     }
 
     fun checkForUpdates(userInitiated: Boolean) {
+        if (!shouldRunUpdateCheck(userInitiated, BuildConfig.DEBUG)) {
+            return
+        }
         if (!userInitiated) {
             if (hasAutoChecked) {
                 return
@@ -356,3 +359,8 @@ class AppUpdateManager(
         val FILE_NAME_SANITIZER = Regex("[^A-Za-z0-9._-]")
     }
 }
+
+internal fun shouldRunUpdateCheck(
+    userInitiated: Boolean,
+    isDebugBuild: Boolean,
+): Boolean = userInitiated || !isDebugBuild

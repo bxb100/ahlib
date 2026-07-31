@@ -4,6 +4,8 @@ import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -23,6 +25,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.style.Style
+import androidx.compose.foundation.style.rememberUpdatedStyleState
+import androidx.compose.foundation.style.styleable
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -36,8 +41,6 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
@@ -94,6 +97,7 @@ import cn.ahlib.reservation.data.AvailabilitySlot
 import cn.ahlib.reservation.data.RoomDetail
 import cn.ahlib.reservation.data.RoomSummary
 import cn.ahlib.reservation.data.isSelectableForReservation
+import cn.ahlib.reservation.ui.theme.ReservationDesignSystem
 import cn.ahlib.reservation.ui.theme.spacing
 import java.util.GregorianCalendar
 import kotlinx.coroutines.delay
@@ -272,87 +276,91 @@ fun RoomsScreen(
 }
 
 @Composable
-private fun RoomCard(
+internal fun RoomCard(
     room: RoomSummary,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+    style: Style = Style,
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(MaterialTheme.spacing.medium),
-            horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
-        ) {
-            RemoteRoomImage(
-                url = room.coverUrl,
-                modifier = Modifier.size(width = 116.dp, height = 96.dp),
+    val interactionSource = remember { MutableInteractionSource() }
+    val styleState = rememberUpdatedStyleState(interactionSource) {
+        it.isEnabled = true
+    }
+    Row(
+        modifier = modifier
+            .clickable(
+                interactionSource = interactionSource,
+                indication = null,
+                role = Role.Button,
+                onClick = onClick,
             )
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
-            ) {
+            .styleable(
+                styleState,
+                ReservationDesignSystem.styles.roomCard,
+                style,
+            ),
+        horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
+    ) {
+        RemoteRoomImage(
+            url = room.coverUrl,
+            modifier = Modifier.size(width = 116.dp, height = 96.dp),
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.small),
+        ) {
+            Text(
+                text = room.roomName.ifBlank {
+                    stringResource(R.string.unknown_value)
+                },
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            room.venueName?.takeIf(String::isNotBlank)?.let { venue ->
                 Text(
-                    text = room.roomName.ifBlank {
-                        stringResource(R.string.unknown_value)
-                    },
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
+                    text = venue,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
-                room.venueName?.takeIf(String::isNotBlank)?.let { venue ->
+            }
+            room.address?.takeIf(String::isNotBlank)?.let { address ->
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.LocationOn,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     Text(
-                        text = venue,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.primary,
-                        maxLines = 1,
+                        text = address,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
                 }
-                room.address?.takeIf(String::isNotBlank)?.let { address ->
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Outlined.LocationOn,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Text(
-                            text = address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                room.totalNum?.let { count ->
+                    StatusPill(
+                        text = stringResource(R.string.room_capacity_value, count),
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    room.totalNum?.let { count ->
-                        StatusPill(
-                            text = stringResource(R.string.room_capacity_value, count),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    room.ableNum?.let { count ->
-                        StatusPill(
-                            text = stringResource(R.string.available_left, count),
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        )
-                    }
+                room.ableNum?.let { count ->
+                    StatusPill(
+                        text = stringResource(R.string.available_left, count),
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
                 }
             }
         }

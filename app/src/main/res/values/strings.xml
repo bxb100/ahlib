@@ -261,4 +261,9 @@
     <string name="app_update_failed">\u66f4\u65b0\u4e0b\u8f7d\u5931\u8d25\uff0c\u8bf7\u91cd\u8bd5</string>
     <string name="app_update_up_to_date">\u5f53\u524d\u5df2\u662f\u6700\u65b0\u7248\u672c</string>
     <string name="app_update_check_failed">\u68c0\u67e5\u66f4\u65b0\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5</string>
+    <string name="library_web_view_open">\u7f51\u9875\u89c6\u56fe</string>
+    <string name="library_web_view_close">\u5173\u95ed</string>
+    <string name="library_web_view_refresh">\u5237\u65b0</string>
+    <string name="library_web_view_title">\u5b89\u5fbd\u7701\u56fe\u4e66\u9986</string>
+    <string name="library_web_view_host">www.lib.ah.cn</string>
 </resources>

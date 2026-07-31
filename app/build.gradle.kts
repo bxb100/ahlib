@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -15,13 +17,13 @@ fun String.asBuildConfigString(): String =
 
 android {
     namespace = "cn.ahlib.reservation"
-    compileSdk = 36
-    buildToolsVersion = "36.0.0"
+    compileSdk = 37
+    buildToolsVersion = "37.0.0"
 
     defaultConfig {
         applicationId = "cn.ahlib.reservation"
         minSdk = 35
-        targetSdk = 36
+        targetSdk = 37
         versionCode = releaseVersionCode
         versionName = releaseVersionName
 
@@ -69,6 +71,12 @@ android {
 
     kotlin {
         jvmToolchain(25)
+        compilerOptions {
+            jvmTarget = JvmTarget.fromTarget("25")
+            freeCompilerArgs.add(
+                "-opt-in=androidx.compose.foundation.style.ExperimentalFoundationStyleApi",
+            )
+        }
     }
 
     packaging {
@@ -94,6 +102,7 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
 
     implementation(platform(libs.androidx.compose.bom))
+    implementation(libs.androidx.compose.foundation)
     implementation(libs.androidx.compose.ui)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)

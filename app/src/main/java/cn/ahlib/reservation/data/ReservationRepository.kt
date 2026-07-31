@@ -6,6 +6,7 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import retrofit2.HttpException
 
 class ReservationRepository internal constructor(
@@ -108,6 +109,23 @@ class ReservationRepository internal constructor(
     internal fun clearLocalSession() {
         clearCaches()
         cookieJar.clear()
+    }
+
+    internal fun webViewCookies(url: String): List<String> {
+        val httpUrl = url.toHttpUrlOrNull() ?: return emptyList()
+        return cookieJar.loadForRequest(httpUrl).map { cookie ->
+            buildString {
+                append(cookie.name)
+                append('=')
+                append(cookie.value)
+                append("; Path=")
+                append(cookie.path)
+                if (cookie.secure) {
+                    append("; Secure")
+                }
+                append("; SameSite=Lax")
+            }
+        }
     }
 
     suspend fun sendMessageCode(

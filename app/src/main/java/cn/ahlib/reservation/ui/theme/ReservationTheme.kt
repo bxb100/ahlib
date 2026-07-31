@@ -192,7 +192,19 @@ data class ReservationSpacing(
 
 private val DefaultReservationSpacing = ReservationSpacing()
 
-private val LocalReservationSpacing = staticCompositionLocalOf {
+internal val LocalReservationColorScheme = staticCompositionLocalOf {
+    LightColors
+}
+
+internal val LocalReservationTypography = staticCompositionLocalOf {
+    ReservationTypography
+}
+
+internal val LocalReservationShapes = staticCompositionLocalOf {
+    ReservationShapes
+}
+
+internal val LocalReservationSpacing = staticCompositionLocalOf {
     DefaultReservationSpacing
 }
 
@@ -228,6 +240,9 @@ fun ReservationTheme(
     }
 
     CompositionLocalProvider(
+        LocalReservationColorScheme provides colors,
+        LocalReservationTypography provides ReservationTypography,
+        LocalReservationShapes provides ReservationShapes,
         LocalReservationSpacing provides DefaultReservationSpacing,
     ) {
         MaterialTheme(

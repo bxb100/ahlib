@@ -1,6 +1,7 @@
 package cn.ahlib.reservation.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -16,12 +17,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.MeetingRoom
 import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -430,6 +433,20 @@ private fun AuthenticatedContent(
                 },
                 actions = {
                     if (state.selectedTab == AuthenticatedTab.RESERVATIONS) {
+                        IconButton(
+                            onClick = {
+                                context.startActivity(
+                                    Intent(context, LibraryWebViewActivity::class.java),
+                                )
+                            },
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Public,
+                                contentDescription = stringResource(
+                                    R.string.library_web_view_open,
+                                ),
+                            )
+                        }
                         ReservationStatusFilterAction(
                             selectedStatusFilters = state.reservationList.statusFilters,
                             onToggleStatusFilter = viewModel::toggleReservationStatusFilter,

@@ -38,6 +38,36 @@ class AppUpdateLogicTest {
     }
 
     @Test
+    fun `debug build skips automatic update check`() {
+        assertFalse(
+            shouldRunUpdateCheck(
+                userInitiated = false,
+                isDebugBuild = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `debug build allows manual update check`() {
+        assertTrue(
+            shouldRunUpdateCheck(
+                userInitiated = true,
+                isDebugBuild = true,
+            ),
+        )
+    }
+
+    @Test
+    fun `release build allows automatic update check`() {
+        assertTrue(
+            shouldRunUpdateCheck(
+                userInitiated = false,
+                isDebugBuild = false,
+            ),
+        )
+    }
+
+    @Test
     fun `unparsable versions are never newer`() {
         assertFalse(isRemoteVersionNewer("1.0.0-main.8", "unknown"))
         assertFalse(isRemoteVersionNewer("unknown", "1.0.0-main.8"))
