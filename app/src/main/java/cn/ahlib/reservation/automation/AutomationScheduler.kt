@@ -119,7 +119,11 @@ class AutomationScheduler(
         val request = requestBuilder.build()
         workManager.enqueueUniqueWork(
             task.uniqueWorkName,
-            ExistingWorkPolicy.REPLACE,
+            if (task == AutomationTask.AUTO_BOOK) {
+                ExistingWorkPolicy.KEEP
+            } else {
+                ExistingWorkPolicy.REPLACE
+            },
             request,
         )
     }

@@ -498,11 +498,14 @@ private fun AutomationLogCard(entry: AutomationLogEntry) {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Text(
-                    text = DateFormat.getDateTimeInstance(
+                val formattedTimestamp = remember(entry.timestampMillis) {
+                    DateFormat.getDateTimeInstance(
                         DateFormat.SHORT,
                         DateFormat.MEDIUM,
-                    ).format(Date(entry.timestampMillis)),
+                    ).format(Date(entry.timestampMillis))
+                }
+                Text(
+                    text = formattedTimestamp,
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

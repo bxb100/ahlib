@@ -4,8 +4,14 @@ import android.app.Application
 import cn.ahlib.reservation.automation.AutomationManager
 import cn.ahlib.reservation.data.AppContainer
 import cn.ahlib.reservation.location.DeviceLocationProvider
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 
 class ReservationApplication : Application() {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
     lateinit var appContainer: AppContainer
         private set
 
@@ -17,11 +23,13 @@ class ReservationApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
-        appContainer = AppContainer(this)
+        appContainer = AppContainer(this, applicationScope)
         locationProvider = DeviceLocationProvider(this)
         automationManager = AutomationManager(
             context = this,
         )
-        automationManager.sync()
+        applicationScope.launch {
+            automationManager.sync()
+        }
     }
 }

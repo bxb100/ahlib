@@ -1,5 +1,6 @@
 package cn.ahlib.reservation.automation
 
+import android.app.AlarmManager
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -36,5 +37,21 @@ class AutomationBootReceiver : BroadcastReceiver() {
         val application = context.applicationContext as ReservationApplication
         application.automationManager.sync()
         AutomationLog.info("Automation schedules restored after a system event.")
+    }
+}
+
+class ExactAlarmPermissionReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        if (
+            intent.action !=
+            AlarmManager.ACTION_SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED
+        ) {
+            return
+        }
+        val application = context.applicationContext as ReservationApplication
+        application.automationManager.sync()
+        AutomationLog.info(
+            "Automation schedules restored after the exact alarm permission changed.",
+        )
     }
 }

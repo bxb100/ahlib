@@ -25,9 +25,11 @@ import cn.ahlib.reservation.data.RoomSignRequest
 import cn.ahlib.reservation.data.RoomSummary
 import cn.ahlib.reservation.data.SIGN_STATE_PENDING
 import cn.ahlib.reservation.data.SIGN_STATE_SIGNED_IN
+import cn.ahlib.reservation.data.SIGN_STATE_SIGNED_OUT
 import cn.ahlib.reservation.data.SessionValidation
 import cn.ahlib.reservation.data.UserInfo
 import cn.ahlib.reservation.data.isCancellationEligible
+import cn.ahlib.reservation.data.isPendingCheckIn
 import cn.ahlib.reservation.data.isSelectableForReservation
 import cn.ahlib.reservation.data.toSessionValidation
 import cn.ahlib.reservation.location.ChinaCoordinateConverter
@@ -77,9 +79,26 @@ enum class AuthenticatedTab {
     PROFILE,
 }
 
-enum class ReservationFilter {
+enum class ReservationStatusFilter {
     PENDING_CHECK_IN,
-    ALL,
+    SIGNED_IN,
+    SIGNED_OUT,
+    OTHER,
+    ;
+
+    companion object {
+        val DEFAULT_SELECTION: Set<ReservationStatusFilter> = setOf(
+            PENDING_CHECK_IN,
+            SIGNED_IN,
+        )
+    }
+}
+
+internal fun AppointmentRecord.reservationStatusFilter(): ReservationStatusFilter = when {
+    signState == SIGN_STATE_SIGNED_IN -> ReservationStatusFilter.SIGNED_IN
+    signState == SIGN_STATE_SIGNED_OUT -> ReservationStatusFilter.SIGNED_OUT
+    isPendingCheckIn() -> ReservationStatusFilter.PENDING_CHECK_IN
+    else -> ReservationStatusFilter.OTHER
 }
 
 enum class LoginRetention(val days: Int) {
@@ -177,7 +196,7 @@ data class BookingUiState(
 
 data class ReservationListUiState(
     val reservations: List<AppointmentRecord> = emptyList(),
-    val filter: ReservationFilter = ReservationFilter.PENDING_CHECK_IN,
+    val statusFilters: Set<ReservationStatusFilter> = ReservationStatusFilter.DEFAULT_SELECTION,
     val pageNum: Int = 0,
     val totalPages: Int = 0,
     val total: Int = 0,
@@ -250,11 +269,26 @@ data class ReservationUiState(
 
 internal fun sortReservationsByDate(
     reservations: List<AppointmentRecord>,
-): List<AppointmentRecord> = reservations.sortedWith(
-    compareBy<AppointmentRecord>(
-        { record -> record.reservationDateForSorting() ?: LocalDate.MAX },
-        { record -> record.reservationStartTimeForSorting() ?: LocalTime.MAX },
-    ),
+): List<AppointmentRecord> = reservations
+    .map { record ->
+        SortableReservation(
+            date = record.reservationDateForSorting() ?: LocalDate.MAX,
+            startTime = record.reservationStartTimeForSorting() ?: LocalTime.MAX,
+            record = record,
+        )
+    }
+    .sortedWith(
+        compareBy<SortableReservation>(
+            SortableReservation::date,
+            SortableReservation::startTime,
+        ),
+    )
+    .map(SortableReservation::record)
+
+private data class SortableReservation(
+    val date: LocalDate,
+    val startTime: LocalTime,
+    val record: AppointmentRecord,
 )
 
 internal fun mergeRefreshedRooms(
@@ -1361,10 +1395,13 @@ class ReservationViewModel(
         loadReservations(reset = true)
     }
 
-    fun selectReservationFilter(filter: ReservationFilter) {
+    fun toggleReservationStatusFilter(status: ReservationStatusFilter) {
         _uiState.update { state ->
+            val current = state.reservationList.statusFilters
             state.copy(
-                reservationList = state.reservationList.copy(filter = filter),
+                reservationList = state.reservationList.copy(
+                    statusFilters = if (status in current) current - status else current + status,
+                ),
             )
         }
     }

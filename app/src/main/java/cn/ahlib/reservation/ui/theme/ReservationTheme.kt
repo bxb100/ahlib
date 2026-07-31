@@ -14,6 +14,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -189,8 +190,10 @@ data class ReservationSpacing(
     val section: Dp = 24.dp,
 )
 
+private val DefaultReservationSpacing = ReservationSpacing()
+
 private val LocalReservationSpacing = staticCompositionLocalOf {
-    ReservationSpacing()
+    DefaultReservationSpacing
 }
 
 val MaterialTheme.spacing: ReservationSpacing
@@ -205,11 +208,13 @@ fun ReservationTheme(
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colors = when {
-        dynamicColor && darkTheme -> dynamicDarkColorScheme(context)
-        dynamicColor -> dynamicLightColorScheme(context)
-        darkTheme -> DarkColors
-        else -> LightColors
+    val colors = remember(darkTheme, dynamicColor, context) {
+        when {
+            dynamicColor && darkTheme -> dynamicDarkColorScheme(context)
+            dynamicColor -> dynamicLightColorScheme(context)
+            darkTheme -> DarkColors
+            else -> LightColors
+        }
     }
 
     val activity = context as? Activity
@@ -223,7 +228,7 @@ fun ReservationTheme(
     }
 
     CompositionLocalProvider(
-        LocalReservationSpacing provides ReservationSpacing(),
+        LocalReservationSpacing provides DefaultReservationSpacing,
     ) {
         MaterialTheme(
             colorScheme = colors,

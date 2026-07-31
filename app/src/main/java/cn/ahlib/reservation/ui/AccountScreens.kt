@@ -31,23 +31,27 @@ import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.PhotoLibrary
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -106,7 +110,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun ReservationsScreen(
     reservations: List<AppointmentRecord>,
-    selectedFilter: ReservationFilter,
+    selectedStatusFilters: Set<ReservationStatusFilter>,
     isLoading: Boolean,
     isLoadingMore: Boolean,
     canLoadMore: Boolean,
@@ -116,20 +120,21 @@ fun ReservationsScreen(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onCancel: (AppointmentRecord) -> Unit,
-    onFilterChange: (ReservationFilter) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pendingCancellation by remember {
         mutableStateOf<AppointmentRecord?>(null)
     }
-    val visibleReservations = reservations.filter { record ->
-        selectedFilter == ReservationFilter.ALL || record.isPendingCheckIn()
+    val visibleReservations = remember(reservations, selectedStatusFilters) {
+        reservations.filter { record ->
+            record.reservationStatusFilter() in selectedStatusFilters
+        }
     }
     val listState = rememberLazyListState()
     val latestCanLoadMore by rememberUpdatedState(canLoadMore)
     val latestOnLoadMore by rememberUpdatedState(onLoadMore)
 
-    LaunchedEffect(selectedFilter) {
+    LaunchedEffect(selectedStatusFilters) {
         listState.scrollToItem(0)
     }
     LaunchedEffect(listState) {
@@ -157,133 +162,91 @@ fun ReservationsScreen(
             }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
-        Surface(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    horizontal = MaterialTheme.spacing.screen,
-                    vertical = MaterialTheme.spacing.medium,
-                ),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainerLow,
-        ) {
-            SingleChoiceSegmentedButtonRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(MaterialTheme.spacing.medium),
-            ) {
-                ReservationFilter.entries.forEachIndexed { index, filter ->
-                    SegmentedButton(
-                        selected = selectedFilter == filter,
-                        onClick = { onFilterChange(filter) },
-                        shape = SegmentedButtonDefaults.itemShape(
-                            index = index,
-                            count = ReservationFilter.entries.size,
-                        ),
-                        label = {
-                            Text(stringResource(filter.labelResource()))
-                        },
-                    )
+    PullToRefreshBox(
+        isRefreshing = isLoading && reservations.isNotEmpty(),
+        onRefresh = onRefresh,
+        modifier = modifier.fillMaxSize(),
+    ) {
+        when {
+            isLoading && reservations.isEmpty() -> {
+                LoadingContent(modifier = Modifier.fillMaxSize())
+            }
+
+            errorText != null && reservations.isEmpty() -> {
+                ErrorContent(
+                    message = errorText,
+                    onRetry = onRetry,
+                    modifier = Modifier.fillMaxSize(),
+                )
+            }
+
+            visibleReservations.isEmpty() -> {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                ) {
+                    item(key = "reservation-empty") {
+                        EmptyContent(
+                            text = stringResource(
+                                if (reservations.isEmpty()) {
+                                    R.string.reservation_empty
+                                } else {
+                                    R.string.reservation_filtered_empty
+                                },
+                            ),
+                            modifier = Modifier.fillParentMaxSize(),
+                            icon = Icons.Outlined.EventBusy,
+                        )
+                    }
                 }
             }
-        }
 
-        PullToRefreshBox(
-            isRefreshing = isLoading && reservations.isNotEmpty(),
-            onRefresh = onRefresh,
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-        ) {
-            when {
-                isLoading && reservations.isEmpty() -> {
-                    LoadingContent(modifier = Modifier.fillMaxSize())
-                }
-
-                errorText != null && reservations.isEmpty() -> {
-                    ErrorContent(
-                        message = errorText,
-                        onRetry = onRetry,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-
-                visibleReservations.isEmpty() -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                    ) {
-                        item(key = "reservation-empty") {
-                            EmptyContent(
-                                text = stringResource(
-                                    if (
-                                        selectedFilter ==
-                                        ReservationFilter.PENDING_CHECK_IN
-                                    ) {
-                                        R.string.reservation_pending_empty
-                                    } else {
-                                        R.string.reservation_empty
-                                    },
-                                ),
-                                modifier = Modifier.fillParentMaxSize(),
-                                icon = Icons.Outlined.EventBusy,
+            else -> {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(MaterialTheme.spacing.screen),
+                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+                ) {
+                    if (errorText != null) {
+                        item(key = "reservation-error") {
+                            InlineErrorMessage(
+                                message = errorText,
+                                actionLabel = stringResource(R.string.retry),
+                                onAction = onRetry,
                             )
                         }
                     }
-                }
-
-                else -> {
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(MaterialTheme.spacing.screen),
-                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
-                    ) {
-                        if (errorText != null) {
-                            item(key = "reservation-error") {
-                                InlineErrorMessage(
-                                    message = errorText,
-                                    actionLabel = stringResource(R.string.retry),
-                                    onAction = onRetry,
-                                )
+                    itemsIndexed(
+                        items = visibleReservations,
+                        key = { index, record ->
+                            record.id.ifBlank {
+                                "${record.bookingId}:${record.bookDate}:${record.startTime}:$index"
                             }
-                        }
-                        items(
-                            items = visibleReservations,
-                            key = { record ->
-                                record.id.ifBlank {
-                                    listOf(
-                                        record.bookingId,
-                                        record.bookDate,
-                                        record.startTime,
-                                    ).joinToString(":")
-                                }
-                            },
-                        ) { record ->
-                            ReservationCard(
-                                record = record,
-                                isCancelling = record.id in cancellingIds,
-                                onCancel = { pendingCancellation = record },
-                            )
-                        }
-                        if (isLoadingMore) {
-                            item(key = "reservation-footer") {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(
-                                        8.dp,
-                                        Alignment.CenterHorizontally,
-                                    ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                ) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Text(stringResource(R.string.loading_more))
-                                }
+                        },
+                    ) { _, record ->
+                        ReservationCard(
+                            record = record,
+                            isCancelling = record.id in cancellingIds,
+                            onCancel = { pendingCancellation = record },
+                        )
+                    }
+                    if (isLoadingMore) {
+                        item(key = "reservation-footer") {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 8.dp),
+                                horizontalArrangement = Arrangement.spacedBy(
+                                    8.dp,
+                                    Alignment.CenterHorizontally,
+                                ),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(20.dp),
+                                )
+                                Text(stringResource(R.string.loading_more))
                             }
                         }
                     }
@@ -333,9 +296,52 @@ private fun ReservationLoadMoreObservation.shouldLoadMore(): Boolean =
         totalItemsCount > 0 &&
         lastVisibleIndex >= totalItemsCount - 2
 
-private fun ReservationFilter.labelResource(): Int = when (this) {
-    ReservationFilter.PENDING_CHECK_IN -> R.string.reservation_filter_pending
-    ReservationFilter.ALL -> R.string.reservation_filter_all
+private fun ReservationStatusFilter.labelResource(): Int = when (this) {
+    ReservationStatusFilter.PENDING_CHECK_IN -> R.string.sign_pending
+    ReservationStatusFilter.SIGNED_IN -> R.string.signed_in
+    ReservationStatusFilter.SIGNED_OUT -> R.string.signed_out
+    ReservationStatusFilter.OTHER -> R.string.reservation_filter_other
+}
+
+@Composable
+fun ReservationStatusFilterAction(
+    selectedStatusFilters: Set<ReservationStatusFilter>,
+    onToggleStatusFilter: (ReservationStatusFilter) -> Unit,
+) {
+    var isMenuExpanded by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { isMenuExpanded = true }) {
+            BadgedBox(
+                badge = {
+                    if (selectedStatusFilters.size < ReservationStatusFilter.entries.size) {
+                        Badge()
+                    }
+                },
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.FilterList,
+                    contentDescription = stringResource(R.string.reservation_filter_action),
+                )
+            }
+        }
+        DropdownMenu(
+            expanded = isMenuExpanded,
+            onDismissRequest = { isMenuExpanded = false },
+        ) {
+            ReservationStatusFilter.entries.forEach { status ->
+                DropdownMenuItem(
+                    text = { Text(stringResource(status.labelResource())) },
+                    onClick = { onToggleStatusFilter(status) },
+                    leadingIcon = {
+                        Checkbox(
+                            checked = status in selectedStatusFilters,
+                            onCheckedChange = null,
+                        )
+                    },
+                )
+            }
+        }
+    }
 }
 
 @Composable

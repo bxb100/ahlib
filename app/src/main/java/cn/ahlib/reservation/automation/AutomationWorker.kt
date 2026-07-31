@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import cn.ahlib.reservation.ReservationApplication
+import kotlinx.coroutines.CancellationException
 
 class AutomationWorker(
     appContext: Context,
@@ -28,6 +29,8 @@ class AutomationWorker(
                 AutomationTask.AUTO_BOOK -> engine.runAutoBooking()
                 AutomationTask.CANCELLATION_CHECK -> engine.runCancellationCheck()
             }
+        } catch (exception: CancellationException) {
+            throw exception
         } catch (exception: Exception) {
             AutomationLog.error(
                 "Automation task failed unexpectedly: " +

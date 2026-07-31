@@ -3,17 +3,26 @@ package cn.ahlib.reservation.data
 import android.content.Context
 import cn.ahlib.reservation.BuildConfig
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
-class AppContainer(context: Context) {
+class AppContainer(
+    context: Context,
+    backgroundScope: CoroutineScope,
+) {
     val repository: ReservationRepository
     val readerQrCodeRepository: ReaderQrCodeRepository
 
     init {
-        clearDeprecatedReaderAccountHistory(context.applicationContext)
-        readerQrCodeRepository = ReaderQrCodeRepository(context.applicationContext)
+        val appContext = context.applicationContext
+        backgroundScope.launch(Dispatchers.IO) {
+            clearDeprecatedReaderAccountHistory(appContext)
+        }
+        readerQrCodeRepository = ReaderQrCodeRepository(appContext)
         val gson = GsonFactory.create()
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
         val okHttpClient = OkHttpClient.Builder()

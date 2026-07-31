@@ -396,6 +396,14 @@ private fun AuthenticatedContent(
                         fontWeight = FontWeight.SemiBold,
                     )
                 },
+                actions = {
+                    if (state.selectedTab == AuthenticatedTab.RESERVATIONS) {
+                        ReservationStatusFilterAction(
+                            selectedStatusFilters = state.reservationList.statusFilters,
+                            onToggleStatusFilter = viewModel::toggleReservationStatusFilter,
+                        )
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background,
                     scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
@@ -456,7 +464,7 @@ private fun AuthenticatedContent(
 
             AuthenticatedTab.RESERVATIONS -> ReservationsScreen(
                 reservations = state.reservationList.reservations,
-                selectedFilter = state.reservationList.filter,
+                selectedStatusFilters = state.reservationList.statusFilters,
                 isLoading = state.reservationList.isLoading,
                 isLoadingMore = state.reservationList.isLoadingMore,
                 canLoadMore = state.reservationList.canLoadMore,
@@ -466,7 +474,6 @@ private fun AuthenticatedContent(
                 onRetry = viewModel::retryReservations,
                 onLoadMore = viewModel::loadNextReservationsPage,
                 onCancel = viewModel::cancelReservation,
-                onFilterChange = viewModel::selectReservationFilter,
                 modifier = contentModifier,
             )
 

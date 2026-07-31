@@ -55,18 +55,23 @@ internal class QrImageHistoryStore(context: Context) {
         uri: Uri,
         scannedAtMillis: Long = System.currentTimeMillis(),
     ): List<QrImageHistoryEntry> {
-        persistReadPermission(uri)
-        val previous = load()
-        val updated = updateQrImageHistory(
-            entries = previous,
-            newEntry = QrImageHistoryEntry(
-                uriString = uri.toString(),
-                scannedAtMillis = scannedAtMillis,
-            ),
-        )
-        releaseRemovedPermissions(previous, updated)
-        save(updated)
-        return updated
+        try {
+            persistReadPermission(uri)
+            val previous = load()
+            val updated = updateQrImageHistory(
+                entries = previous,
+                newEntry = QrImageHistoryEntry(
+                    uriString = uri.toString(),
+                    scannedAtMillis = scannedAtMillis,
+                ),
+            )
+            releaseRemovedPermissions(previous, updated)
+            save(updated)
+            return updated
+        } catch (exception: Exception) {
+            deleteManagedImage(uri)
+            throw exception
+        }
     }
 
     suspend fun saveCapturedQrImage(
@@ -81,14 +86,14 @@ internal class QrImageHistoryStore(context: Context) {
         }
         val file = File(
             capturedImageDirectory,
-            "qr-$capturedAtMillis-${System.nanoTime()}.png",
+            "qr-$capturedAtMillis-${System.nanoTime()}.jpg",
         )
         try {
             FileOutputStream(file).use { output ->
                 check(
                     bitmap.compress(
-                        Bitmap.CompressFormat.PNG,
-                        PNG_COMPRESSION_QUALITY,
+                        Bitmap.CompressFormat.JPEG,
+                        JPEG_COMPRESSION_QUALITY,
                         output,
                     ),
                 ) {
@@ -177,7 +182,7 @@ internal class QrImageHistoryStore(context: Context) {
         const val PREFERENCES_NAME = "qr_image_history"
         const val KEY_ENTRIES = "entries"
         const val CAPTURED_IMAGE_DIRECTORY = "qr-scan-history"
-        const val PNG_COMPRESSION_QUALITY = 100
+        const val JPEG_COMPRESSION_QUALITY = 85
     }
 }
 

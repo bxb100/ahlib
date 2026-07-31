@@ -7,6 +7,7 @@ import cn.ahlib.reservation.data.CreateReservationRequest
 import cn.ahlib.reservation.data.ReservationRepository
 import cn.ahlib.reservation.data.isCancellationEligible
 import cn.ahlib.reservation.data.isPendingCheckIn
+import kotlin.random.Random
 import kotlinx.coroutines.delay
 
 internal class AutomationEngine(
@@ -69,6 +70,7 @@ internal class AutomationEngine(
         )
 
         var attempts = 0
+        var consecutiveFailures = 0
         var lastFailureMessage: String? = null
         while (true) {
             val currentSettings = preferences.settings.value
@@ -120,6 +122,7 @@ internal class AutomationEngine(
                                 )
                         }
                     }
+                    consecutiveFailures = 0
                 }
 
                 is ApiResult.Failure -> {
@@ -133,6 +136,7 @@ internal class AutomationEngine(
                             "Unable to load room availability",
                         )
                     }
+                    consecutiveFailures += 1
                 }
             }
             if (!denseRun) {
@@ -143,7 +147,14 @@ internal class AutomationEngine(
             if (remainingMillis <= 0) {
                 break
             }
-            delay(minOf(AUTO_BOOKING_DENSE_POLL_INTERVAL_MILLIS, remainingMillis))
+            val pollIntervalMillis = if (consecutiveFailures > 0) {
+                val backoffShift = minOf(consecutiveFailures, AUTO_BOOKING_MAX_BACKOFF_SHIFT)
+                (AUTO_BOOKING_DENSE_POLL_INTERVAL_MILLIS shl backoffShift) +
+                    Random.nextLong(AUTO_BOOKING_BACKOFF_JITTER_MILLIS)
+            } else {
+                AUTO_BOOKING_DENSE_POLL_INTERVAL_MILLIS
+            }
+            delay(minOf(pollIntervalMillis, remainingMillis))
         }
         val failureSuffix = lastFailureMessage
             ?.takeIf(String::isNotBlank)
@@ -296,6 +307,8 @@ internal class AutomationEngine(
         const val FIRST_PAGE = 1
         const val RESERVATION_PAGE_SIZE = 10
         const val AUTO_BOOKING_DENSE_POLL_INTERVAL_MILLIS = 500L
+        const val AUTO_BOOKING_MAX_BACKOFF_SHIFT = 3
+        const val AUTO_BOOKING_BACKOFF_JITTER_MILLIS = 250L
     }
 }
 

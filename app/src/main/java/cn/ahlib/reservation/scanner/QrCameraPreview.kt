@@ -16,6 +16,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -31,6 +32,9 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.max
 import kotlin.math.roundToInt
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 fun QrCameraPreview(
@@ -42,6 +46,7 @@ fun QrCameraPreview(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val currentOnQrCodeDetected by rememberUpdatedState(onQrCodeDetected)
+    val scope = rememberCoroutineScope()
     val currentOnError by rememberUpdatedState(onError)
     var trackingGraphics by remember { mutableStateOf(emptyList<QrCodeGraphic>()) }
     val cameraController = remember(context) {
@@ -142,19 +147,22 @@ fun QrCameraPreview(
                 detectedBarcode != null &&
                 terminalDelivered.compareAndSet(false, true)
             ) {
-                pendingDetection.set(
-                    PendingQrDetection(
-                        rawValue = detectedBarcode.rawValue.orEmpty(),
-                        capturedImage = captureQrCodeImage(
-                            previewView = previewView,
-                            boundingBox = detectedBarcode.boundingBox,
+                scope.launch {
+                    val capturedImage = captureQrCodeImage(
+                        previewView = previewView,
+                        boundingBox = detectedBarcode.boundingBox,
+                    )
+                    pendingDetection.set(
+                        PendingQrDetection(
+                            rawValue = detectedBarcode.rawValue.orEmpty(),
+                            capturedImage = capturedImage,
                         ),
-                    ),
-                )
-                mainHandler.postDelayed(
-                    deliverPendingDetection,
-                    QR_TRACKING_CONFIRMATION_DELAY_MILLIS,
-                )
+                    )
+                    mainHandler.postDelayed(
+                        deliverPendingDetection,
+                        QR_TRACKING_CONFIRMATION_DELAY_MILLIS,
+                    )
+                }
             }
         }
 
@@ -260,40 +268,42 @@ internal fun calculateQrCropBounds(
     )
 }
 
-private fun captureQrCodeImage(
+private suspend fun captureQrCodeImage(
     previewView: PreviewView,
     boundingBox: Rect?,
 ): Bitmap? {
     val box = boundingBox ?: return null
     val source = previewView.bitmap ?: return null
-    val cropped = runCatching {
-        val previewWidth = previewView.width
-        val previewHeight = previewView.height
-        if (previewWidth <= 0 || previewHeight <= 0) {
-            return@runCatching null
+    val previewWidth = previewView.width
+    val previewHeight = previewView.height
+    return withContext(Dispatchers.Default) {
+        val cropped = runCatching {
+            if (previewWidth <= 0 || previewHeight <= 0) {
+                return@runCatching null
+            }
+            val horizontalScale = source.width.toFloat() / previewWidth
+            val verticalScale = source.height.toFloat() / previewHeight
+            val bounds = calculateQrCropBounds(
+                imageWidth = source.width,
+                imageHeight = source.height,
+                left = (box.left * horizontalScale).roundToInt(),
+                top = (box.top * verticalScale).roundToInt(),
+                right = (box.right * horizontalScale).roundToInt(),
+                bottom = (box.bottom * verticalScale).roundToInt(),
+            ) ?: return@runCatching null
+            Bitmap.createBitmap(
+                source,
+                bounds.left,
+                bounds.top,
+                bounds.width,
+                bounds.height,
+            )
+        }.getOrNull()
+        if (cropped !== source) {
+            source.recycle()
         }
-        val horizontalScale = source.width.toFloat() / previewWidth
-        val verticalScale = source.height.toFloat() / previewHeight
-        val bounds = calculateQrCropBounds(
-            imageWidth = source.width,
-            imageHeight = source.height,
-            left = (box.left * horizontalScale).roundToInt(),
-            top = (box.top * verticalScale).roundToInt(),
-            right = (box.right * horizontalScale).roundToInt(),
-            bottom = (box.bottom * verticalScale).roundToInt(),
-        ) ?: return@runCatching null
-        Bitmap.createBitmap(
-            source,
-            bounds.left,
-            bounds.top,
-            bounds.width,
-            bounds.height,
-        )
-    }.getOrNull()
-    if (cropped !== source) {
-        source.recycle()
+        cropped
     }
-    return cropped
 }
 
 private const val QR_CROP_PADDING_DIVISOR = 5

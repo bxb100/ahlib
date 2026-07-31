@@ -781,7 +781,7 @@ private fun AvailabilityDayCard(
     selected: Boolean,
     onClick: () -> Unit,
 ) {
-    val label = day.toAvailabilityDateLabel()
+    val label = remember(day.date) { day.toAvailabilityDateLabel() }
     val selectable = day.isSelectableForReservation()
     val containerColor = when {
         selected -> MaterialTheme.colorScheme.primary
@@ -1140,13 +1140,16 @@ private fun BookingConfirmationDialog(
     onMobileChange: (String) -> Unit,
     onConfirm: () -> Unit,
 ) {
-    val slot = availability
-        .asSequence()
-        .flatMap { day -> day.list.asSequence() }
-        .firstOrNull { item -> item.id == selectedSlotId }
+    val slot = remember(availability, selectedSlotId) {
+        availability
+            .asSequence()
+            .flatMap { day -> day.list.asSequence() }
+            .firstOrNull { item -> item.id == selectedSlotId }
+    }
+    val isMobileValid = remember(bookingMobile) { bookingMobile.isValidMobile() }
     val canSubmit = !isBooking &&
         (!requireBookingName || bookingName.isNotBlank()) &&
-        (!requireBookingMobile || bookingMobile.isValidMobile())
+        (!requireBookingMobile || isMobileValid)
 
     AlertDialog(
         onDismissRequest = {
@@ -1202,7 +1205,7 @@ private fun BookingConfirmationDialog(
                         keyboardOptions = KeyboardOptions(
                             keyboardType = KeyboardType.Phone,
                         ),
-                        isError = bookingMobile.isNotEmpty() && !bookingMobile.isValidMobile(),
+                        isError = bookingMobile.isNotEmpty() && !isMobileValid,
                     )
                 } else {
                     LabeledValue(

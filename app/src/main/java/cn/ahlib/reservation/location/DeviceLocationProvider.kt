@@ -53,7 +53,7 @@ class DeviceLocationProvider(context: Context) {
                     locationManager.getLastKnownLocation(provider)
                 }.getOrNull()
             }
-            .filter { location -> System.currentTimeMillis() - location.time <= MAX_LAST_LOCATION_AGE }
+            .filter { location -> location.elapsedRealtimeAgeMillis <= MAX_LAST_LOCATION_AGE }
             .minByOrNull(Location::getAccuracy)
 
         if (recentLocation != null) {

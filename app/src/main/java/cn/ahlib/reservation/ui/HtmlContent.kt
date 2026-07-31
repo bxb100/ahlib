@@ -38,6 +38,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -67,7 +68,9 @@ import coil3.request.allowHardware
 import coil3.request.crossfade
 import java.io.ByteArrayOutputStream
 import java.util.Locale
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
 
 @Composable
 fun RoomHtmlContent(
@@ -78,20 +81,25 @@ fun RoomHtmlContent(
     imageShareName: String? = null,
     textStyle: TextStyle = MaterialTheme.typography.bodyMedium,
 ) {
-    val content = remember(html) { parseHtmlContent(html) }
+    val content by produceState<ParsedHtmlContent?>(initialValue = null, html) {
+        value = withContext(Dispatchers.Default) {
+            parseHtmlContent(html)
+        }
+    }
+    val parsedContent = content ?: return
 
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (content.text.text.isNotBlank()) {
+        if (parsedContent.text.text.isNotBlank()) {
             Text(
-                text = content.text,
+                text = parsedContent.text,
                 style = textStyle,
             )
         }
 
-        content.imageUrls.forEach { imageUrl ->
+        parsedContent.imageUrls.forEach { imageUrl ->
             RoomContentImage(
                 imageUrl = imageUrl,
                 contentDescription = imageContentDescription,
@@ -117,27 +125,40 @@ private fun RoomContentImage(
     val shape = RoundedCornerShape(12.dp)
     val context = androidx.compose.ui.platform.LocalContext.current
     val resources = LocalResources.current
-    val imageModel = remember(imageUrl) { imageUrl.toCoilModel() }
+    val imageModel by produceState<Any?>(
+        initialValue = if (isNetworkImage) imageUrl else null,
+        imageUrl,
+    ) {
+        if (!isNetworkImage) {
+            value = withContext(Dispatchers.Default) {
+                imageUrl.toCoilModel()
+            }
+        }
+    }
     val request = remember(context, imageModel, imageUrl, retryAttempt) {
-        if (isNetworkImage) {
-            buildLibraryImageRequest(
+        val model = imageModel
+        when {
+            isNetworkImage -> buildLibraryImageRequest(
                 context = context,
                 url = imageUrl,
                 retryAttempt = retryAttempt,
             )
-        } else {
-            ImageRequest.Builder(context)
-                .data(imageModel)
+
+            model != null -> ImageRequest.Builder(context)
+                .data(model)
                 .crossfade(true)
                 .allowHardware(false)
                 .build()
+
+            else -> null
         }
     }
 
-    LaunchedEffect(state, isNetworkImage) {
+    val isErrorState = state is AsyncImagePainter.State.Error
+    LaunchedEffect(isErrorState, isNetworkImage, retryAttempt) {
         if (
             isNetworkImage &&
-            state is AsyncImagePainter.State.Error &&
+            isErrorState &&
             retryAttempt < MAX_LIBRARY_IMAGE_AUTO_RETRIES
         ) {
             delay(350)
@@ -162,15 +183,17 @@ private fun RoomContentImage(
             .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         contentAlignment = Alignment.Center,
     ) {
-        AsyncImage(
-            model = request,
-            contentDescription = contentDescription,
-            modifier = Modifier
-                .matchParentSize()
-                .padding(4.dp),
-            contentScale = ContentScale.Fit,
-            onState = { state = it },
-        )
+        if (request != null) {
+            AsyncImage(
+                model = request,
+                contentDescription = contentDescription,
+                modifier = Modifier
+                    .matchParentSize()
+                    .padding(4.dp),
+                contentScale = ContentScale.Fit,
+                onState = { state = it },
+            )
+        }
 
         when (state) {
             AsyncImagePainter.State.Empty,

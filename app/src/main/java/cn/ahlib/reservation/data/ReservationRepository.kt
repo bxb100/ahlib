@@ -4,6 +4,8 @@ import com.google.gson.Gson
 import com.google.gson.JsonParseException
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import retrofit2.HttpException
 
 class ReservationRepository internal constructor(
@@ -69,7 +71,11 @@ class ReservationRepository internal constructor(
         )
         if (result is ApiResult.Success) {
             val tokenSaved = result.data.token
-                ?.let { token -> cookieJar.saveAuthenticationToken(token, loginTime) }
+                ?.let { token ->
+                    withContext(Dispatchers.IO) {
+                        cookieJar.saveAuthenticationToken(token, loginTime)
+                    }
+                }
                 ?: false
             if (!tokenSaved) {
                 return ApiResult.Failure(

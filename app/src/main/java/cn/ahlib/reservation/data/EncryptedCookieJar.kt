@@ -6,6 +6,7 @@ import android.content.SharedPreferences
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import android.util.Log
 import androidx.core.content.edit
 import com.google.gson.Gson
 import java.nio.charset.StandardCharsets
@@ -25,25 +26,26 @@ internal class EncryptedCookieJar(
         context.applicationContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val lock = Any()
     private val cookies = mutableListOf<StoredCookie>()
-
-    init {
-        synchronized(lock) {
-            cookies += readCookiesLocked()
-            removeExpiredLocked(System.currentTimeMillis())
-        }
-    }
+    private var loaded = false
+    private var cachedKey: SecretKey? = null
 
     override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
         synchronized(lock) {
+            ensureLoadedLocked()
+            val persistentBefore = this.cookies.filter(StoredCookie::persistent)
             updateCookiesLocked(cookies, System.currentTimeMillis())
-            persistLocked()
+            val persistentAfter = this.cookies.filter(StoredCookie::persistent)
+            if (persistentAfter.toSet() != persistentBefore.toSet()) {
+                persistLocked()
+            }
         }
     }
 
     override fun loadForRequest(url: HttpUrl): List<Cookie> =
         synchronized(lock) {
-            val changed = removeExpiredLocked(System.currentTimeMillis())
-            if (changed) {
+            ensureLoadedLocked()
+            val persistentRemoved = removeExpiredLocked(System.currentTimeMillis())
+            if (persistentRemoved) {
                 persistLocked()
             }
             cookies.mapNotNull(StoredCookie::toCookie)
@@ -53,22 +55,46 @@ internal class EncryptedCookieJar(
     override fun saveAuthenticationToken(token: String, retentionDays: Int): Boolean {
         val cookie = createAuthenticationCookie(token, retentionDays) ?: return false
         return synchronized(lock) {
+            ensureLoadedLocked()
+            val persistentBefore = cookies.filter(StoredCookie::persistent)
             updateCookiesLocked(listOf(cookie), System.currentTimeMillis())
-            persistLocked()
+            val persistentAfter = cookies.filter(StoredCookie::persistent)
+            if (persistentAfter.toSet() != persistentBefore.toSet()) {
+                persistLocked()
+            } else {
+                true
+            }
         }
     }
 
     override fun clear() {
         synchronized(lock) {
+            loaded = true
             cookies.clear()
             preferences.edit { remove(COOKIES_KEY) }
         }
     }
 
-    private fun removeExpiredLocked(now: Long): Boolean =
-        cookies.removeAll { storedCookie ->
-            storedCookie.expiresAt <= now
+    private fun ensureLoadedLocked() {
+        if (loaded) {
+            return
         }
+        loaded = true
+        cookies += readCookiesLocked()
+        removeExpiredLocked(System.currentTimeMillis())
+    }
+
+    private fun removeExpiredLocked(now: Long): Boolean {
+        var removedPersistent = false
+        cookies.removeAll { storedCookie ->
+            val expired = storedCookie.expiresAt <= now
+            if (expired && storedCookie.persistent) {
+                removedPersistent = true
+            }
+            expired
+        }
+        return removedPersistent
+    }
 
     private fun updateCookiesLocked(
         responseCookies: List<Cookie>,
@@ -103,6 +129,7 @@ internal class EncryptedCookieJar(
             val json = decrypt(encryptedValue)
             gson.fromJson(json, StoredCookies::class.java)?.cookies.orEmpty()
         } catch (exception: Exception) {
+            Log.w(TAG, "Stored cookies are unreadable; clearing cookie storage.", exception)
             preferences.edit { remove(COOKIES_KEY) }
             resetKey()
             emptyList()
@@ -123,6 +150,7 @@ internal class EncryptedCookieJar(
             try {
                 encrypt(json)
             } catch (secondException: Exception) {
+                Log.w(TAG, "Failed to encrypt cookies; clearing cookie storage.", secondException)
                 preferences.edit { remove(COOKIES_KEY) }
                 return false
             }
@@ -155,9 +183,11 @@ internal class EncryptedCookieJar(
     }
 
     private fun getOrCreateKey(): SecretKey {
+        cachedKey?.let { return it }
         val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
         val existingKey = keyStore.getKey(KEY_ALIAS, null) as? SecretKey
         if (existingKey != null) {
+            cachedKey = existingKey
             return existingKey
         }
 
@@ -172,16 +202,18 @@ internal class EncryptedCookieJar(
             .setRandomizedEncryptionRequired(true)
             .build()
         keyGenerator.init(keySpec)
-        return keyGenerator.generateKey()
+        return keyGenerator.generateKey().also { cachedKey = it }
     }
 
     private fun resetKey() {
+        cachedKey = null
         try {
             val keyStore = KeyStore.getInstance(ANDROID_KEY_STORE).apply { load(null) }
             if (keyStore.containsAlias(KEY_ALIAS)) {
                 keyStore.deleteEntry(KEY_ALIAS)
             }
-        } catch (_: Exception) {
+        } catch (exception: Exception) {
+            Log.w(TAG, "Failed to reset the cookie encryption key.", exception)
         }
     }
 
@@ -242,6 +274,7 @@ internal class EncryptedCookieJar(
     }
 
     private companion object {
+        const val TAG = "EncryptedCookieJar"
         const val PREFERENCES_NAME = "encrypted_session_cookies"
         const val COOKIES_KEY = "cookies"
         const val ANDROID_KEY_STORE = "AndroidKeyStore"
