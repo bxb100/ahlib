@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<lint>
+    <!-- AGP 9.3.0 crashes while this detector resolves BroadcastReceiver intents. -->
+    <issue id="UnsafeIntentLaunch">
+        <ignore path="src/main/java/cn/ahlib/reservation/automation/AutomationReceivers.kt" />
+    </issue>
+</lint>

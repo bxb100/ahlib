@@ -1,0 +1,15 @@
+.gradle/
+.gradle-docker/
+.idea/
+local.properties
+**/build/
+captures/
+.DS_Store
+*.iml
+.tmp
+
+.kotlin/
+*.jks
+*.keystore
+*.p12
+*.pfx

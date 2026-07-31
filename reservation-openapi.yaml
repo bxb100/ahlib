@@ -1,0 +1,1239 @@
+openapi: 3.0.3
+info:
+  title: Anhui Library Reservation API
+  version: 0.3.0
+  description: |
+    Reservation-related API contract reconstructed from the supplied minified
+    JavaScript bundles. Paths, HTTP methods, request fields, pagination
+    defaults, response fields, and client-side request transformations are
+    based on the API wrappers and their UI call sites.
+  x-source-files:
+    - app.d0558476.js
+    - chunk-6c97e5fb.cd09c564.js
+  x-source-modules:
+    login-api: "1802"
+    common-api: d8cf
+    room-api: eac3
+    request-wrapper: b775
+servers:
+  - url: https://www.lib.ah.cn
+    description: Host embedded in the supplied application bundle
+  - url: /
+    description: Same-origin deployment used by the request wrapper
+tags:
+  - name: Authentication
+  - name: Navigation
+  - name: Rooms
+  - name: Reservations
+  - name: Attendance
+paths:
+  /api-server/pc/pc_pass/createVerify:
+    get:
+      tags:
+        - Authentication
+      operationId: createLoginCaptcha
+      summary: Create a login captcha
+      security: []
+      parameters:
+        - name: w
+          in: query
+          required: true
+          description: Captcha image width.
+          schema:
+            type: integer
+            minimum: 1
+          example: 150
+        - name: h
+          in: query
+          required: true
+          description: Captcha image height.
+          schema:
+            type: integer
+            minimum: 1
+          example: 50
+        - name: ls
+          in: query
+          required: true
+          description: Captcha rendering parameter passed by the client.
+          schema:
+            type: integer
+            minimum: 0
+          example: 20
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Application-level response.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CaptchaResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/pc_pass/login:
+    post:
+      tags:
+        - Authentication
+      operationId: login
+      summary: Log in with a reader account
+      description: |
+        The bundled client encrypts `userPassword` before sending it. It uses
+        AES-CBC with PKCS#7 padding, UTF-8 key `asefcxtsgckzxKey`, UTF-8 IV
+        `asefcxtsgckzx_Iv`, and sends the CryptoJS Base64 output.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/pc_pass/isLogin:
+    get:
+      tags:
+        - Authentication
+      operationId: getLoginStatus
+      summary: Check whether the current session is logged in
+      security:
+        - SessionCookie: []
+        - {}
+      parameters:
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Login status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginStatusResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/pc_pass/logout:
+    get:
+      tags:
+        - Authentication
+      operationId: logout
+      summary: Log out of the current session
+      security:
+        - SessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Logout result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/userInfo:
+    get:
+      tags:
+        - Authentication
+      operationId: getCurrentUserInfo
+      summary: Get the current user's profile
+      security:
+        - SessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Current user profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserInfoResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/pc_pass/getWxConfig:
+    get:
+      tags:
+        - Authentication
+      operationId: getWechatJsSdkConfig
+      summary: Get the WeChat JS SDK configuration
+      description: |
+        Web-only helper used before WeChat QR scanning or location access. The
+        native Android application uses CameraX and platform location services
+        instead, but this endpoint is included to preserve the supplied
+        JavaScript contract.
+      security: []
+      parameters:
+        - name: url
+          in: query
+          required: true
+          description: Percent-encoded browser page URL to sign.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: WeChat JS SDK signing configuration.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WechatConfigResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/pc_pass/sendMessageCode:
+    get:
+      tags:
+        - Authentication
+      operationId: sendPhoneVerificationCode
+      summary: Send a phone verification code
+      security: []
+      parameters:
+        - name: mobile
+          in: query
+          required: true
+          description: Mobile number that will receive the verification code.
+          schema:
+            type: string
+            pattern: "^[1][3-9][0-9]{9}$"
+        - name: verifyCode
+          in: query
+          required: true
+          description: Captcha text entered by the user.
+          schema:
+            type: string
+        - name: uniCode
+          in: query
+          required: true
+          description: Captcha challenge identifier returned by createVerify.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Phone verification message result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/update/phoneNum:
+    post:
+      tags:
+        - Authentication
+      operationId: updatePhoneNumber
+      summary: Update the current user's phone number
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdatePhoneNumberRequest"
+      responses:
+        "200":
+          description: Phone number update result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc_pass/category/pcSelectList:
+    get:
+      tags:
+        - Navigation
+      operationId: listPcCategories
+      summary: List the PC navigation categories
+      description: |
+        The application uses this navigation tree to locate the seat-reservation
+        category dynamically. The English site passes `siteCode=english`;
+        the default Chinese site omits the parameter.
+      security: []
+      parameters:
+        - name: siteCode
+          in: query
+          required: false
+          description: Optional site variant, such as `english`.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Navigation category tree.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryListResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/pc_pass/roomDataPage:
+    get:
+      tags:
+        - Rooms
+      operationId: listRooms
+      summary: List reservable rooms
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/PageNum"
+        - $ref: "#/components/parameters/PageSize"
+        - name: idCategory
+          in: query
+          required: true
+          description: Room category identifier.
+          schema:
+            type: string
+        - name: resourcesType
+          in: query
+          required: false
+          schema:
+            type: string
+          example: ""
+        - name: keywords
+          in: query
+          required: false
+          schema:
+            type: string
+          example: ""
+        - name: year
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: total
+          in: query
+          required: false
+          deprecated: true
+          description: |
+            Local pagination state sent by the bundled client. The server may
+            ignore this value.
+          schema:
+            type: integer
+            minimum: 0
+          example: 0
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Paginated room list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomPageResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/pc_pass/roomDetail:
+    get:
+      tags:
+        - Rooms
+      operationId: getRoomDetail
+      summary: Get room details
+      security: []
+      parameters:
+        - name: id
+          in: query
+          required: true
+          description: Room identifier.
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Room details.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomDetailResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/pc_pass/roomBookDetail/{roomId}:
+    get:
+      tags:
+        - Rooms
+        - Reservations
+      operationId: getRoomAvailability
+      summary: Get reservable dates and time slots
+      security: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Room availability calendar.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RoomAvailabilityResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/appoint:
+    post:
+      tags:
+        - Reservations
+      operationId: createReservation
+      summary: Create a room reservation
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReservationRequest"
+      responses:
+        "200":
+          description: Reservation creation result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/appointDataPage:
+    get:
+      tags:
+        - Reservations
+      operationId: listMyReservations
+      summary: List reservations for the current user
+      security:
+        - SessionCookie: []
+      parameters:
+        - name: pageNum
+          in: query
+          required: true
+          description: One-based page number.
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          required: true
+          description: Number of records per page.
+          schema:
+            type: integer
+            minimum: 1
+            default: 10
+        - name: type
+          in: query
+          required: true
+          description: Reservation list filter.
+          schema:
+            type: string
+            default: "1"
+        - name: total
+          in: query
+          required: true
+          description: Current total-page count maintained by the client.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: Paginated reservation list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationPageResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/cancelAppoint:
+    post:
+      tags:
+        - Reservations
+      operationId: cancelReservation
+      summary: Cancel a reservation
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CancelReservationRequest"
+      responses:
+        "200":
+          description: Cancellation result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/getOneAppointRecord/{roomId}:
+    get:
+      tags:
+        - Reservations
+        - Attendance
+      operationId: getCurrentRoomReservation
+      summary: Get the current user's reservation record for a room
+      security:
+        - SessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/RoomId"
+        - $ref: "#/components/parameters/CacheBuster"
+      responses:
+        "200":
+          description: |
+            Current reservation record. `data` may be null when no matching
+            reservation exists.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReservationRecordResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/roomSign:
+    post:
+      tags:
+        - Attendance
+      operationId: signInToRoomReservation
+      summary: Sign in to a room reservation
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomSignInRequest"
+      responses:
+        "200":
+          description: Sign-in result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+  /api-server/pc/room/roomSignOff:
+    put:
+      tags:
+        - Attendance
+      operationId: signOutFromRoomReservation
+      summary: Sign out from a room reservation
+      security:
+        - SessionCookie: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomSignOutRequest"
+      responses:
+        "200":
+          description: Sign-out result.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MutationResponse"
+        default:
+          $ref: "#/components/responses/TransportError"
+
+components:
+  securitySchemes:
+    SessionCookie:
+      type: apiKey
+      in: header
+      name: Cookie
+      description: |
+        Browser session established by the login endpoint. The cookie name is
+        not visible in the supplied JavaScript. The login response also returns
+        `data.token`, which the client stores as `pc_token`, but the supplied
+        request interceptor does not attach that value to API requests.
+
+  parameters:
+    CacheBuster:
+      name: _t
+      in: query
+      required: false
+      description: |
+        Millisecond Unix timestamp automatically appended to every GET request
+        by the bundled request interceptor.
+      schema:
+        type: integer
+        format: int64
+      example: 1785436800000
+    PageNum:
+      name: pageNum
+      in: query
+      required: true
+      description: One-based page number.
+      schema:
+        type: integer
+        minimum: 1
+      example: 1
+    PageSize:
+      name: pageSize
+      in: query
+      required: true
+      description: Number of records per page.
+      schema:
+        type: integer
+        minimum: 1
+      example: 4
+    RoomId:
+      name: roomId
+      in: path
+      required: true
+      description: Room identifier.
+      schema:
+        type: string
+
+  responses:
+    TransportError:
+      description: HTTP transport error or non-JSON response.
+
+  schemas:
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - readerId
+        - userPassword
+        - verifyCode
+        - uniCode
+        - loginTime
+      properties:
+        readerId:
+          type: string
+          description: Reader card number or another supported reader account.
+        userPassword:
+          type: string
+          format: byte
+          description: AES-CBC encrypted password encoded as Base64.
+          x-client-transform:
+            algorithm: AES-CBC
+            padding: PKCS7
+            key-encoding: UTF-8
+            key: asefcxtsgckzxKey
+            iv-encoding: UTF-8
+            iv: asefcxtsgckzx_Iv
+            output: Base64
+        verifyCode:
+          type: string
+          description: Captcha text entered by the user.
+        uniCode:
+          type: string
+          description: Captcha challenge identifier returned by createVerify.
+        loginTime:
+          type: integer
+          description: Login retention option in days.
+          enum:
+            - 2
+            - 15
+            - 30
+          default: 2
+
+    CaptchaData:
+      type: object
+      additionalProperties: true
+      required:
+        - img
+        - uniCode
+      properties:
+        img:
+          type: string
+          description: Captcha image data or image URL.
+        uniCode:
+          type: string
+          description: Captcha challenge identifier.
+
+    CaptchaResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/CaptchaData"
+
+    UserInfo:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+        token:
+          type: string
+          description: Token stored by the bundled client as `pc_token`.
+        name:
+          type: string
+        mobile:
+          type: string
+        mobileStatus:
+          oneOf:
+            - type: string
+            - type: integer
+          description: A value equal to zero triggers mobile verification.
+        readerStatus:
+          oneOf:
+            - type: string
+            - type: integer
+        idCard:
+          type: string
+        gender:
+          oneOf:
+            - type: string
+            - type: integer
+        bindInfo:
+          type: string
+
+    WechatConfig:
+      type: object
+      additionalProperties: true
+      required:
+        - appId
+        - timestamp
+        - nonceStr
+        - signature
+      properties:
+        appId:
+          type: string
+        timestamp:
+          oneOf:
+            - type: integer
+              format: int64
+            - type: string
+        nonceStr:
+          type: string
+        signature:
+          type: string
+        jsApiList:
+          type: array
+          items:
+            type: string
+
+    WechatConfigResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          allOf:
+            - $ref: "#/components/schemas/WechatConfig"
+          nullable: true
+
+    LoginResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/UserInfo"
+
+    LoginStatusResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          type: boolean
+
+    UserInfoResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/UserInfo"
+
+    UpdatePhoneNumberRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - mobileCode
+        - mobile
+      properties:
+        mobileCode:
+          type: string
+          minLength: 4
+          maxLength: 6
+          description: Verification code delivered to the mobile number.
+        mobile:
+          type: string
+          pattern: "^[1][3-9][0-9]{9}$"
+          description: New mobile number.
+
+    Category:
+      type: object
+      additionalProperties: true
+      required:
+        - id
+        - categoryName
+        - idModel
+        - contentTemplate
+        - listTemplate
+        - childList
+      properties:
+        id:
+          type: string
+        categoryName:
+          type: string
+        idModel:
+          oneOf:
+            - type: string
+            - type: integer
+        contentTemplate:
+          type: string
+        listTemplate:
+          type: string
+        childList:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    CategoryListResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+
+    RoomSummary:
+      type: object
+      additionalProperties: true
+      required:
+        - id
+        - roomName
+      properties:
+        id:
+          type: string
+        roomName:
+          type: string
+        venueName:
+          type: string
+        address:
+          type: string
+        coverUrl:
+          type: string
+        isTop:
+          oneOf:
+            - type: string
+            - type: integer
+
+    RoomDetail:
+      allOf:
+        - $ref: "#/components/schemas/RoomSummary"
+        - type: object
+          additionalProperties: true
+          properties:
+            publishTime:
+              type: string
+            viewNum:
+              oneOf:
+                - type: integer
+                - type: string
+            keyword:
+              type: string
+            phoneNum:
+              type: string
+            roomArea:
+              oneOf:
+                - type: number
+                - type: string
+            totalNum:
+              oneOf:
+                - type: integer
+                - type: string
+            ableNum:
+              oneOf:
+                - type: integer
+                - type: string
+            defaultBookingDays:
+              oneOf:
+                - type: integer
+                - type: string
+            ableNums:
+              oneOf:
+                - type: integer
+                - type: string
+            introduction:
+              type: string
+            appointRule:
+              type: string
+            distance:
+              oneOf:
+                - type: number
+                - type: string
+
+    RoomPageData:
+      type: object
+      additionalProperties: true
+      required:
+        - result
+        - totalPages
+      properties:
+        result:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomSummary"
+        totalPages:
+          type: integer
+          minimum: 0
+
+    RoomPageResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/RoomPageData"
+
+    RoomDetailResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/RoomDetail"
+
+    AvailabilitySlot:
+      type: object
+      additionalProperties: true
+      required:
+        - id
+        - startTime
+        - endTime
+      properties:
+        id:
+          type: string
+          description: Booking slot identifier used as `bookingId`.
+        startTime:
+          type: string
+        endTime:
+          type: string
+        leftNum:
+          oneOf:
+            - type: integer
+            - type: string
+        bookFlag:
+          oneOf:
+            - type: integer
+            - type: string
+        isOpen:
+          oneOf:
+            - type: integer
+            - type: string
+
+    AvailabilityDay:
+      type: object
+      additionalProperties: true
+      required:
+        - date
+        - list
+        - isOpen
+        - totalLeftNum
+      properties:
+        date:
+          type: string
+          format: date
+        list:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilitySlot"
+        isOpen:
+          oneOf:
+            - type: integer
+            - type: string
+        totalLeftNum:
+          oneOf:
+            - type: integer
+            - type: string
+
+    RoomAvailabilityResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+        - data
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailabilityDay"
+
+    CreateReservationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - venueName
+        - dateTime
+        - bookingId
+      properties:
+        venueName:
+          type: string
+        dateTime:
+          type: string
+          description: |
+            Date and display time range joined by one space, for example
+            `2026-08-01 09:00~10:00`.
+        bookingId:
+          type: string
+          description: Selected availability-slot identifier.
+        userName:
+          type: string
+          maxLength: 20
+          description: |
+            Sent only when the logged-in profile does not already provide a
+            name.
+        phoneNum:
+          type: string
+          maxLength: 11
+          description: |
+            Sent only when the logged-in profile does not already provide a
+            mobile number.
+
+    AppointmentRecord:
+      type: object
+      additionalProperties: true
+      properties:
+        id:
+          type: string
+          description: Reservation record identifier.
+        signState:
+          oneOf:
+            - type: integer
+            - type: string
+        status:
+          oneOf:
+            - type: integer
+            - type: string
+        statusMerge:
+          oneOf:
+            - type: integer
+            - type: string
+        statusMergeName:
+          type: string
+        roomName:
+          type: string
+        bookNum:
+          oneOf:
+            - type: integer
+            - type: string
+        userName:
+          type: string
+        phoneNum:
+          type: string
+        bookDate:
+          type: string
+          format: date
+        startTime:
+          type: string
+        endTime:
+          type: string
+        createTime:
+          type: string
+          format: date-time
+        canSign:
+          oneOf:
+            - type: boolean
+            - type: integer
+            - type: string
+        bookingId:
+          type: string
+          description: Booking slot identifier.
+
+    ReservationPageData:
+      type: object
+      additionalProperties: true
+      properties:
+        result:
+          type: array
+          items:
+            $ref: "#/components/schemas/AppointmentRecord"
+        totalPages:
+          type: integer
+          minimum: 0
+
+    ReservationPageResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          $ref: "#/components/schemas/ReservationPageData"
+
+    CancelReservationRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+      properties:
+        id:
+          type: string
+          description: Reservation record identifier.
+
+    ReservationRecordResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          allOf:
+            - $ref: "#/components/schemas/AppointmentRecord"
+          nullable: true
+
+    Coordinate:
+      oneOf:
+        - type: number
+          format: double
+        - type: string
+      description: |
+        A GCJ-02 coordinate from the WeChat SDK or an empty string when
+        location checking is not used. Native Android clients convert WGS-84
+        platform locations to GCJ-02 before submitting them.
+
+    RoomSignInRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - bookingId
+        - latitude
+        - longitude
+      properties:
+        id:
+          type: string
+          description: Reservation record identifier.
+        bookingId:
+          type: string
+          description: Booking slot identifier.
+        latitude:
+          $ref: "#/components/schemas/Coordinate"
+        longitude:
+          $ref: "#/components/schemas/Coordinate"
+
+    RoomSignOutRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - bookingId
+      properties:
+        id:
+          type: string
+          description: Reservation record identifier.
+        bookingId:
+          type: string
+          description: Booking slot identifier.
+
+    MutationResponse:
+      type: object
+      additionalProperties: true
+      required:
+        - code
+      properties:
+        code:
+          type: integer
+          example: 200
+        errorMsg:
+          type: string
+          nullable: true
+        data:
+          description: Endpoint-specific result value.

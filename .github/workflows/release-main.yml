@@ -1,0 +1,125 @@
+name: Release main
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      RELEASE_VERSION_CODE: ${{ github.run_number }}
+      RELEASE_VERSION_NAME: 1.0.0-main.${{ github.run_number }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up JDK
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: gradle
+
+      - name: Install Android SDK
+        uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699  # v4.0.1
+
+      - name: Install Android SDK 36 components
+        run: |
+          echo "Installing Android SDK 36 components..."
+          sdkmanager --install "platforms;android-36"
+          sdkmanager --install "build-tools;36.0.0"
+
+      - name: Accept Android licenses
+        run: yes | sdkmanager --licenses || true
+
+      - name: Verify Android SDK installation
+        run: |
+          echo "Checking Android SDK installation..."
+          sdkmanager --list_installed | grep -E "(platforms;android-36|build-tools;36)"
+
+      - name: Validate release secrets
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          missing=()
+          [[ -z "$RELEASE_KEYSTORE_BASE64" ]] && missing+=("RELEASE_KEYSTORE_BASE64")
+          [[ -z "$RELEASE_KEY_ALIAS" ]] && missing+=("RELEASE_KEY_ALIAS")
+          [[ -z "$RELEASE_KEYSTORE_PASSWORD" ]] && missing+=("RELEASE_KEYSTORE_PASSWORD")
+          [[ -z "$RELEASE_KEY_PASSWORD" ]] && missing+=("RELEASE_KEY_PASSWORD")
+          if (( ${#missing[@]} > 0 )); then
+            printf 'Missing required GitHub Actions secrets: %s\n' "${missing[*]}"
+            exit 1
+          fi
+
+      - name: Test and build release
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon \
+            :app:testDebugUnitTest \
+            :app:lintRelease \
+            :app:assembleRelease \
+            -PreleaseVersionCode="$RELEASE_VERSION_CODE" \
+            -PreleaseVersionName="$RELEASE_VERSION_NAME"
+
+      - name: Sign release APK
+        id: package
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          keystore_path="$RUNNER_TEMP/release.keystore"
+          unsigned_apk="app/build/outputs/apk/release/app-release-unsigned.apk"
+          signed_apk="app/build/outputs/apk/release/AhlibReservation-${RELEASE_VERSION_NAME}.apk"
+          checksum_path="${signed_apk}.sha256"
+          apksigner="$ANDROID_HOME/build-tools/37.0.0/apksigner"
+
+          printf '%s' "$RELEASE_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          chmod 600 "$keystore_path"
+          "$apksigner" sign \
+            --ks "$keystore_path" \
+            --ks-key-alias "$RELEASE_KEY_ALIAS" \
+            --ks-pass env:RELEASE_KEYSTORE_PASSWORD \
+            --key-pass env:RELEASE_KEY_PASSWORD \
+            --out "$signed_apk" \
+            "$unsigned_apk"
+          "$apksigner" verify --verbose --print-certs "$signed_apk"
+          sha256sum "$signed_apk" > "$checksum_path"
+
+          {
+            echo "apk_path=$signed_apk"
+            echo "checksum_path=$checksum_path"
+            echo "tag=v$RELEASE_VERSION_NAME"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APK_PATH: ${{ steps.package.outputs.apk_path }}
+          CHECKSUM_PATH: ${{ steps.package.outputs.checksum_path }}
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "$APK_PATH" \
+            "$CHECKSUM_PATH" \
+            --target "$GITHUB_SHA" \
+            --title "AhlibReservation $RELEASE_VERSION_NAME" \
+            --generate-notes \
+            --latest

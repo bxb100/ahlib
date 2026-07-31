@@ -1,0 +1,52 @@
+package cn.ahlib.reservation.data
+
+import android.content.Context
+import cn.ahlib.reservation.BuildConfig
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import retrofit2.Retrofit
+import retrofit2.converter.gson.GsonConverterFactory
+
+class AppContainer(context: Context) {
+    val repository: ReservationRepository
+
+    init {
+        clearDeprecatedReaderAccountHistory(context.applicationContext)
+        val gson = GsonFactory.create()
+        val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
+        val okHttpClient = OkHttpClient.Builder()
+            .cookieJar(cookieJar)
+            .addInterceptor(CacheBustingInterceptor())
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+        val api = Retrofit.Builder()
+            .baseUrl(BuildConfig.API_BASE_URL.withTrailingSlash())
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create(gson))
+            .build()
+            .create(ReservationApi::class.java)
+
+        repository = ReservationRepository(
+            api = api,
+            passwordCipher = PasswordCipher(),
+            cookieJar = cookieJar,
+            gson = gson,
+        )
+    }
+
+    private fun clearDeprecatedReaderAccountHistory(context: Context) {
+        context.deleteSharedPreferences(DEPRECATED_READER_ACCOUNTS_PREFERENCES)
+    }
+
+    private fun String.withTrailingSlash(): String =
+        if (endsWith('/')) this else "$this/"
+
+    private companion object {
+        const val CONNECT_TIMEOUT_SECONDS = 15L
+        const val READ_TIMEOUT_SECONDS = 30L
+        const val WRITE_TIMEOUT_SECONDS = 30L
+        const val DEPRECATED_READER_ACCOUNTS_PREFERENCES = "reader_accounts"
+    }
+}
