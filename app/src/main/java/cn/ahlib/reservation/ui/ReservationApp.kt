@@ -46,8 +46,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -304,12 +304,13 @@ private fun AuthenticatedContent(
     val autoBookingConfiguredText = stringResource(R.string.auto_booking_configured)
     val autoBookingTargetClearedText =
         stringResource(R.string.auto_booking_target_cleared)
+    val calendarReminderOpenFailedText =
+        stringResource(R.string.calendar_reminder_open_failed)
     val automationSettings by automationManager.settings.collectAsStateWithLifecycle()
     val automationLogs by automationManager.logs.collectAsStateWithLifecycle()
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.PROFILE) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showReaderQrCodeViewer by rememberSaveable { mutableStateOf(false) }
-
     LaunchedEffect(state.selectedTab) {
         fabMenuExpanded = false
     }
@@ -630,6 +631,15 @@ private fun AuthenticatedContent(
                 onRetry = viewModel::retryReservations,
                 onLoadMore = viewModel::loadNextReservationsPage,
                 onCancel = viewModel::cancelReservation,
+                onAddToCalendar = { record ->
+                    if (!openCalendarReminderEditor(context, record)) {
+                        Toast.makeText(
+                            context,
+                            calendarReminderOpenFailedText,
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
                 modifier = contentModifier,
             )
 

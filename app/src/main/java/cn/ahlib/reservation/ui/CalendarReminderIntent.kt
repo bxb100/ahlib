@@ -7,6 +7,8 @@ import android.provider.CalendarContract
 import cn.ahlib.reservation.R
 import cn.ahlib.reservation.automation.AUTOMATION_TIME_ZONE
 import cn.ahlib.reservation.calendar.ReservationCalendarReminder
+import cn.ahlib.reservation.calendar.createReservationCalendarReminder
+import cn.ahlib.reservation.data.AppointmentRecord
 import java.text.DateFormat
 import java.util.Date
 
@@ -63,6 +65,14 @@ internal fun openCalendarReminderEditor(
     } catch (_: SecurityException) {
         false
     }
+}
+
+internal fun openCalendarReminderEditor(
+    context: Context,
+    record: AppointmentRecord,
+): Boolean {
+    val reminder = createReservationCalendarReminder(record) ?: return false
+    return openCalendarReminderEditor(context, reminder)
 }
 
 private const val CALENDAR_EVENT_MIME_TYPE =

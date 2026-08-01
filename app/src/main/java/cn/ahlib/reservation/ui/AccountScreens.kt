@@ -28,6 +28,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CameraAlt
+import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
@@ -122,6 +123,7 @@ fun ReservationsScreen(
     onRetry: () -> Unit,
     onLoadMore: () -> Unit,
     onCancel: (AppointmentRecord) -> Unit,
+    onAddToCalendar: (AppointmentRecord) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pendingCancellation by remember {
@@ -231,6 +233,7 @@ fun ReservationsScreen(
                             record = record,
                             isCancelling = record.id in cancellingIds,
                             onCancel = { pendingCancellation = record },
+                            onAddToCalendar = { onAddToCalendar(record) },
                         )
                     }
                     if (isLoadingMore) {
@@ -351,6 +354,7 @@ private fun ReservationCard(
     record: AppointmentRecord,
     isCancelling: Boolean,
     onCancel: () -> Unit,
+    onAddToCalendar: () -> Unit,
 ) {
     var isExpanded by rememberSaveable {
         mutableStateOf(false)
@@ -474,30 +478,60 @@ private fun ReservationCard(
                         label = stringResource(R.string.sign_status),
                         value = signStateLabel(record.signState),
                     )
-                    if (record.isCancellationEligible()) {
-                        OutlinedButton(
-                            onClick = onCancel,
-                            enabled = !isCancelling,
-                            modifier = Modifier.align(Alignment.End),
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
+                    if (
+                        record.isPendingCheckIn() ||
+                        record.isCancellationEligible()
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(
+                                MaterialTheme.spacing.small,
+                                Alignment.End,
                             ),
-                            border = BorderStroke(
-                                width = 1.dp,
-                                color = if (isCancelling) {
-                                    MaterialTheme.colorScheme.outlineVariant
-                                } else {
-                                    MaterialTheme.colorScheme.error
-                                },
-                            ),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            if (isCancelling) {
-                                LoadingIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(modifier = Modifier.size(8.dp))
+                            if (record.isPendingCheckIn()) {
+                                TextButton(
+                                    onClick = onAddToCalendar,
+                                    colors = ButtonDefaults.textButtonColors(
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                    ),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.CalendarMonth,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(stringResource(R.string.reservation_add_to_calendar))
+                                }
                             }
-                            Text(stringResource(R.string.cancel_reservation))
+                            if (record.isCancellationEligible()) {
+                                OutlinedButton(
+                                    onClick = onCancel,
+                                    enabled = !isCancelling,
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        contentColor = MaterialTheme.colorScheme.error,
+                                    ),
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color = if (isCancelling) {
+                                            MaterialTheme.colorScheme.outlineVariant
+                                        } else {
+                                            MaterialTheme.colorScheme.error
+                                        },
+                                    ),
+                                ) {
+                                    if (isCancelling) {
+                                        LoadingIndicator(
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                        Spacer(modifier = Modifier.size(8.dp))
+                                    }
+                                    Text(stringResource(R.string.cancel_reservation))
+                                }
+                            }
                         }
                     }
                 }

@@ -201,12 +201,14 @@
     <string name="reservation_cancel_not_allowed">\u5f53\u524d\u9884\u7ea6\u4e0d\u53ef\u53d6\u6d88</string>
     <string name="reservation_cancelled">\u9884\u7ea6\u5df2\u53d6\u6d88</string>
     <string name="reservation_created">\u9884\u7ea6\u6210\u529f</string>
-    <string name="calendar_reminder_prompt_title">\u6dfb\u52a0\u65e5\u5386\u63d0\u9192</string>
-    <string name="calendar_reminder_prompt_body">%1$s \u9884\u7ea6\u6210\u529f\u3002\u662f\u5426\u6dfb\u52a0\u7b7e\u5230\u63d0\u9192\uff1f\n\u63d0\u9192\u65f6\u95f4\uff1a%2$s\n\u7b7e\u5230\u622a\u6b62\uff1a%3$s</string>
+    <string name="calendar_reminder_prompt_title">\u6dfb\u52a0\u5230\u65e5\u5386</string>
+    <string name="calendar_reminder_prompt_body">%1$s \u9884\u7ea6\u6210\u529f\u3002\u662f\u5426\u521b\u5efa\u7b7e\u5230\u65e5\u7a0b\uff1f\n\u65e5\u7a0b\u65f6\u95f4\uff1a%2$s\n\u7b7e\u5230\u622a\u6b62\uff1a%3$s</string>
     <string name="calendar_reminder_add">\u6253\u5f00\u65e5\u5386</string>
+    <string name="reservation_add_to_calendar">\u6dfb\u52a0\u5230\u65e5\u5386</string>
     <string name="calendar_reminder_skip">\u6682\u4e0d\u6dfb\u52a0</string>
     <string name="calendar_reminder_unavailable">\u672a\u627e\u5230\u53ef\u7528\u7684\u65e5\u5386\u5e94\u7528</string>
-    <string name="calendar_reminder_event_title">%1$s \u7b7e\u5230\u63d0\u9192</string>
+    <string name="calendar_reminder_open_failed">\u65e0\u6cd5\u4e3a\u8be5\u9884\u7ea6\u6253\u5f00\u65e5\u5386</string>
+    <string name="calendar_reminder_event_title">%1$s \u7b7e\u5230\u65e5\u7a0b</string>
     <string name="calendar_reminder_event_description">\u9884\u7ea6\u65f6\u6bb5\uff1a%1$s\n\u7b7e\u5230\u622a\u6b62\uff1a%2$s</string>
     <string name="scanner_no_reservation">\u5f53\u524d\u6ca1\u6709\u53ef\u7b7e\u5230\u6216\u7b7e\u9000\u7684\u9884\u7ea6</string>
     <string name="scanner_not_eligible">\u5f53\u524d\u4e0d\u5728\u53ef\u7b7e\u5230\u65f6\u95f4\u5185</string>
