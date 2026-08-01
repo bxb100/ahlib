@@ -27,7 +27,7 @@ val readerQrNativeJniLibs = if (buildReaderQrNativeFromSource) {
     readerQrNativePrebuilt.asFile
 }
 val rustlsPlatformVerifierAar = layout.projectDirectory.file(
-    "libs/rustls-platform-verifier-0.1.1.aar",
+    "libs/rustls-platform-verifier.aar",
 )
 
 fun String.asBuildConfigString(): String =

@@ -63,6 +63,14 @@ mise run native:check
 mise run native:build
 ```
 
+根据 Rust 依赖锁定的 Android companion 版本更新系统 CA 验证 AAR：
+
+```bash
+mise run rustls-aar:update
+```
+
+该任务通过 `cargo metadata` 定位 Cargo 缓存内的官方 AAR，并同步到 `app/libs/rustls-platform-verifier.aar`。如果私有原生仓库不存在，任务会保留已提交的 AAR 并跳过更新。
+
 可以在私有原生仓库存在时强制验证公开仓库的预构建路径：
 
 ```bash

@@ -11,4 +11,4 @@ cp app/build/generated/readerQrNative/jniLibs/arm64-v8a/libreader_qr_native.so \
 mise run prebuilt:check
 ```
 
-Android 系统 CA 验证辅助类由 `app/libs/rustls-platform-verifier-0.1.1.aar` 提供，需与原生库使用的 `rustls-platform-verifier` 版本保持兼容。
+Android 系统 CA 验证辅助类由 `app/libs/rustls-platform-verifier.aar` 提供。私有原生仓库存在时，运行 `mise run rustls-aar:update` 可根据 Cargo 解析出的兼容版本更新该文件。
