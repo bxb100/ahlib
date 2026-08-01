@@ -16,7 +16,7 @@ internal class AutomationEngine(
     private val preferences: AutomationPreferences,
     private val scheduler: AutomationScheduler,
     private val automaticCancellationPrompt: AutomaticCancellationPrompt,
-    private val queueCalendarReminder: (
+    private val queueCalendarReminder: suspend (
         roomName: String,
         venueName: String,
         reservationDateTime: String,

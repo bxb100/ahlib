@@ -18,7 +18,9 @@ class AutomationScheduler(
 ) {
     private val appContext = context.applicationContext
     private val alarmManager = appContext.getSystemService(AlarmManager::class.java)
-    private val workManager = WorkManager.getInstance(appContext)
+    private val workManager by lazy {
+        WorkManager.getInstance(appContext)
+    }
 
     fun sync() {
         clearLegacyReservationReminder()

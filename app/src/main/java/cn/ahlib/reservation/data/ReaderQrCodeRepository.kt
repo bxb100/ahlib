@@ -33,27 +33,30 @@ class ReaderQrCodeRepository(context: Context) {
         PREFERENCES_NAME,
         Context.MODE_PRIVATE,
     )
-    private val client = OkHttpClient.Builder()
-        .cookieJar(InMemoryCookieJar())
-        .followRedirects(false)
-        .followSslRedirects(false)
-        .connectTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .writeTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
-
-    fun cachedContent(readerId: String): String? {
-        val normalizedReaderId = readerId.trim()
-        if (
-            normalizedReaderId.isEmpty() ||
-            preferences.getString(KEY_READER_ID, null) != normalizedReaderId
-        ) {
-            return null
-        }
-        return preferences
-            .getString(KEY_CONTENT, null)
-            ?.takeIf(::canEncodeReaderQrCode)
+    private val client by lazy {
+        OkHttpClient.Builder()
+            .cookieJar(InMemoryCookieJar())
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
     }
+
+    suspend fun cachedContent(readerId: String): String? =
+        withContext(Dispatchers.IO) {
+            val normalizedReaderId = readerId.trim()
+            if (
+                normalizedReaderId.isEmpty() ||
+                preferences.getString(KEY_READER_ID, null) != normalizedReaderId
+            ) {
+                return@withContext null
+            }
+            preferences
+                .getString(KEY_CONTENT, null)
+                ?.takeIf(::canEncodeReaderQrCode)
+        }
 
     fun clearCachedContent(readerId: String) {
         val normalizedReaderId = readerId.trim()

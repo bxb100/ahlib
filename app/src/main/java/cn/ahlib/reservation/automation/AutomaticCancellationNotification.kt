@@ -44,7 +44,7 @@ internal class AutomaticCancellationNotificationPrompt(
     private val notificationManagerCompat = NotificationManagerCompat.from(appContext)
     private val skipStore = AutomaticCancellationSkipStore(appContext)
 
-    init {
+    fun initialize() {
         createNotificationChannel()
     }
 
@@ -55,6 +55,7 @@ internal class AutomaticCancellationNotificationPrompt(
     override suspend fun awaitDecision(
         record: AppointmentRecord,
     ): AutomaticCancellationDecision {
+        initialize()
         if (skipStore.isSkipped(record.id)) {
             return AutomaticCancellationDecision.USER_CANCELLED
         }
@@ -247,11 +248,15 @@ class AutomaticCancellationActionReceiver : BroadcastReceiver() {
         val reservationId = intent.getStringExtra(
             AutomaticCancellationNotificationPrompt.EXTRA_RESERVATION_ID,
         )?.takeIf(String::isNotBlank) ?: return
-        AutomaticCancellationSkipStore(context).skipReservation(reservationId)
-        NotificationManagerCompat.from(context).cancel(
-            AutomaticCancellationNotificationPrompt
-                .AUTOMATIC_CANCELLATION_NOTIFICATION_ID,
-        )
+        val appContext = context.applicationContext
+        launchBackground {
+            AutomaticCancellationSkipStore(appContext)
+                .skipReservation(reservationId)
+            NotificationManagerCompat.from(appContext).cancel(
+                AutomaticCancellationNotificationPrompt
+                    .AUTOMATIC_CANCELLATION_NOTIFICATION_ID,
+            )
+        }
     }
 }
 

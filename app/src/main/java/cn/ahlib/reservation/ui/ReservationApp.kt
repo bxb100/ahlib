@@ -346,7 +346,7 @@ private fun AuthenticatedContent(
                     automationManager::canScheduleExactAlarms,
                 canShowCancellationNotifications =
                     automationManager::canShowCancellationNotifications,
-                onSystemAccessChanged = automationManager::sync,
+                onSystemAccessChanged = automationManager::requestSync,
                 modifier = modifier,
             )
             return

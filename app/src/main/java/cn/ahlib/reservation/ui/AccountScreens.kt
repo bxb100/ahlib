@@ -556,13 +556,15 @@ fun ScannerScreen(
         QrImageHistoryStore(context)
     }
     var imageHistory by remember(imageHistoryStore) {
-        mutableStateOf(imageHistoryStore.load())
+        mutableStateOf(emptyList<QrImageHistoryEntry>())
+    }
+    LaunchedEffect(imageHistoryStore) {
+        imageHistory = imageHistoryStore.load()
     }
     var activeImageUriString by remember {
         mutableStateOf<String?>(null)
     }
     val scanImage: (android.net.Uri) -> Unit = { uri ->
-        imageHistory = imageHistoryStore.record(uri)
         imageScanJob?.cancel()
         imageScanJob = coroutineScope.launch {
             imageScanError = null
@@ -570,6 +572,7 @@ fun ScannerScreen(
             activeImageUriString = uri.toString()
             isImageScanning = true
             try {
+                imageHistory = imageHistoryStore.record(uri)
                 when (val result = scanQrCodeFromImage(context, uri)) {
                     is QrImageScanResult.Success -> onScan(result.code)
 
@@ -890,8 +893,10 @@ fun ScannerScreen(
                             }
                             TextButton(
                                 onClick = {
-                                    imageHistoryStore.clear()
-                                    imageHistory = emptyList()
+                                    coroutineScope.launch {
+                                        imageHistoryStore.clear()
+                                        imageHistory = emptyList()
+                                    }
                                 },
                                 enabled = historyEnabled,
                             ) {

@@ -10,10 +10,17 @@ import cn.ahlib.reservation.data.RoomDetail
 import cn.ahlib.reservation.scanner.QrImageScanError
 import cn.ahlib.reservation.scanner.QrImageScanResult
 import cn.ahlib.reservation.scanner.scanQrCodeFromImage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class AutomationManager(
     context: Context,
+    private val backgroundScope: CoroutineScope,
 ) {
     internal val preferences = AutomationPreferences(context)
     internal val scheduler = AutomationScheduler(context, preferences)
@@ -22,6 +29,7 @@ class AutomationManager(
     private val calendarReminderStore = CalendarReminderStore(context)
     private val automaticSignOutQrStore = AutomaticSignOutQrStore(context)
     private val appContext = context.applicationContext
+    private val schedulerMutex = Mutex()
 
     val settings: StateFlow<AutomationSettings> = preferences.settings
     val logs: StateFlow<List<AutomationLogEntry>> = AutomationLog.entries
@@ -29,12 +37,19 @@ class AutomationManager(
         StateFlow<ReservationCalendarReminder?> =
         calendarReminderStore.pendingReminder
 
-    init {
-        clearLegacyNotificationArtifacts(context)
+    fun initialize() {
+        automaticCancellationPrompt.initialize()
+        clearLegacyNotificationArtifacts(appContext)
     }
 
-    fun sync() {
-        scheduler.sync()
+    suspend fun sync() {
+        schedulerMutex.withLock {
+            scheduler.sync()
+        }
+    }
+
+    fun requestSync() {
+        syncInBackground()
     }
 
     fun configureAutoBooking(
@@ -50,7 +65,7 @@ class AutomationManager(
             endTime = slot.endTime,
         )
         preferences.setTarget(target)
-        scheduler.sync()
+        syncInBackground()
         AutomationLog.info(
             "Automatic booking target updated to ${target.roomName} at " +
                 "${target.startTime}-${target.endTime}.",
@@ -59,13 +74,13 @@ class AutomationManager(
 
     fun clearAutoBookingTarget() {
         preferences.clearTarget()
-        scheduler.sync()
+        syncInBackground()
         AutomationLog.info("Automatic booking target cleared.")
     }
 
     fun setAutoBookingEnabled(enabled: Boolean) {
         preferences.setAutoBookingEnabled(enabled)
-        scheduler.sync()
+        syncInBackground()
         AutomationLog.info(
             if (enabled) {
                 "Automatic booking enabled."
@@ -77,7 +92,7 @@ class AutomationManager(
 
     fun setCancellationEnabled(enabled: Boolean) {
         preferences.setCancellationEnabled(enabled)
-        scheduler.sync()
+        syncInBackground()
         AutomationLog.info(
             if (enabled) {
                 "Automatic cancellation enabled."
@@ -89,7 +104,7 @@ class AutomationManager(
 
     fun setCancellationLeadMinutes(minutes: Int) {
         preferences.setCancellationLeadMinutes(minutes)
-        scheduler.sync()
+        syncInBackground()
         val savedMinutes = preferences.settings.value.cancellationLeadMinutes
         AutomationLog.info(
             "Cancellation lead time changed to $savedMinutes minutes.",
@@ -117,7 +132,7 @@ class AutomationManager(
                 imageUri = storedImageUri.toString(),
             ),
         )
-        scheduler.sync()
+        syncInBackground()
         AutomationLog.info(
             "Automatic sign-out QR image configured for room ${code.roomId}.",
         )
@@ -126,8 +141,10 @@ class AutomationManager(
 
     fun clearAutomaticSignOutQrImage() {
         preferences.clearAutomaticSignOutQrCode()
-        scheduler.sync()
-        automaticSignOutQrStore.clear()
+        backgroundScope.launch(Dispatchers.IO) {
+            automaticSignOutQrStore.clear()
+            sync()
+        }
         AutomationLog.info("Automatic sign-out QR image cleared.")
     }
 
@@ -146,7 +163,9 @@ class AutomationManager(
         settings.value.mockLocationEnabled
 
     fun refreshCancellationSchedule() {
-        scheduler.requestCancellationRefresh()
+        backgroundScope.launch(Dispatchers.IO) {
+            scheduler.requestCancellationRefresh()
+        }
     }
 
     fun canScheduleExactAlarms(): Boolean = scheduler.canScheduleExactAlarms()
@@ -154,12 +173,12 @@ class AutomationManager(
     fun canShowCancellationNotifications(): Boolean =
         automaticCancellationPrompt.canShowNotifications()
 
-    internal fun queueCalendarReminder(
+    internal suspend fun queueCalendarReminder(
         roomName: String,
         venueName: String,
         reservationDateTime: String,
         createdAtMillis: Long,
-    ) {
+    ) = withContext(Dispatchers.IO) {
         if (
             calendarReminderStore.queue(
                 roomName = roomName,
@@ -175,11 +194,19 @@ class AutomationManager(
     }
 
     fun dismissCalendarReminder(id: String) {
-        calendarReminderStore.dismiss(id)
+        backgroundScope.launch(Dispatchers.IO) {
+            calendarReminderStore.dismiss(id)
+        }
     }
 
     fun clearLogs() {
         AutomationLog.clear()
+    }
+
+    private fun syncInBackground() {
+        backgroundScope.launch(Dispatchers.IO) {
+            sync()
+        }
     }
 
     private fun clearLegacyNotificationArtifacts(context: Context) {

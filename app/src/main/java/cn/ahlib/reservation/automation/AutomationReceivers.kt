@@ -5,6 +5,23 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import cn.ahlib.reservation.ReservationApplication
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+
+private val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+internal fun BroadcastReceiver.launchBackground(block: suspend () -> Unit) {
+    val pendingResult = goAsync()
+    receiverScope.launch {
+        try {
+            block()
+        } finally {
+            pendingResult.finish()
+        }
+    }
+}
 
 class AutomationAlarmReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
@@ -17,18 +34,20 @@ class AutomationAlarmReceiver : BroadcastReceiver() {
             }
             ?: return
         val application = context.applicationContext as ReservationApplication
-        when (task) {
-            AutomationTask.AUTO_BOOK ->
-                application.automationManager.scheduler
-                    .scheduleFollowingAutoBookingCheck()
+        launchBackground {
+            when (task) {
+                AutomationTask.AUTO_BOOK ->
+                    application.automationManager.scheduler
+                        .scheduleFollowingAutoBookingCheck()
 
-            AutomationTask.AUTO_SIGN_OUT ->
-                application.automationManager.scheduler
-                    .scheduleNextAutomaticSignOut()
+                AutomationTask.AUTO_SIGN_OUT ->
+                    application.automationManager.scheduler
+                        .scheduleNextAutomaticSignOut()
 
-            AutomationTask.CANCELLATION_CHECK -> Unit
+                AutomationTask.CANCELLATION_CHECK -> Unit
+            }
+            application.automationManager.scheduler.enqueue(task)
         }
-        application.automationManager.scheduler.enqueue(task)
     }
 }
 
@@ -43,8 +62,10 @@ class AutomationBootReceiver : BroadcastReceiver() {
             return
         }
         val application = context.applicationContext as ReservationApplication
-        application.automationManager.sync()
-        AutomationLog.info("Automation schedules restored after a system event.")
+        launchBackground {
+            application.automationManager.sync()
+            AutomationLog.info("Automation schedules restored after a system event.")
+        }
     }
 }
 
@@ -57,9 +78,11 @@ class ExactAlarmPermissionReceiver : BroadcastReceiver() {
             return
         }
         val application = context.applicationContext as ReservationApplication
-        application.automationManager.sync()
-        AutomationLog.info(
-            "Automation schedules restored after the exact alarm permission changed.",
-        )
+        launchBackground {
+            application.automationManager.sync()
+            AutomationLog.info(
+                "Automation schedules restored after the exact alarm permission changed.",
+            )
+        }
     }
 }

@@ -680,7 +680,11 @@ private fun CaptchaPreview(
                 },
             contentAlignment = Alignment.Center,
         ) {
-            if (captchaModel != null) {
+            if (isCaptchaLoading) {
+                LoadingIndicator(
+                    modifier = Modifier.size(24.dp),
+                )
+            } else if (captchaModel != null) {
                 AsyncImage(
                     model = captchaModel,
                     contentDescription = null,
@@ -689,7 +693,7 @@ private fun CaptchaPreview(
                         .padding(4.dp),
                     contentScale = ContentScale.Fit,
                 )
-            } else if (!isCaptchaLoading) {
+            } else {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -705,20 +709,6 @@ private fun CaptchaPreview(
                 }
             }
 
-            if (isCaptchaLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            MaterialTheme.colorScheme.surface.copy(alpha = 0.84f),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(24.dp),
-                    )
-                }
-            }
         }
 
         FilledTonalIconButton(

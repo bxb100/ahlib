@@ -25,13 +25,17 @@ internal class QrImageHistoryStore(context: Context) {
         PREFERENCES_NAME,
         Context.MODE_PRIVATE,
     )
-    private val gson = Gson()
+    private val gson by lazy { Gson() }
     private val capturedImageDirectory = File(
         appContext.filesDir,
         CAPTURED_IMAGE_DIRECTORY,
     )
 
-    fun load(): List<QrImageHistoryEntry> {
+    suspend fun load(): List<QrImageHistoryEntry> = withContext(Dispatchers.IO) {
+        loadFromStorage()
+    }
+
+    private fun loadFromStorage(): List<QrImageHistoryEntry> {
         val serialized = preferences.getString(KEY_ENTRIES, null)
             ?: return emptyList()
         return runCatching {
@@ -51,13 +55,13 @@ internal class QrImageHistoryStore(context: Context) {
         }
     }
 
-    fun record(
+    suspend fun record(
         uri: Uri,
         scannedAtMillis: Long = System.currentTimeMillis(),
-    ): List<QrImageHistoryEntry> {
+    ): List<QrImageHistoryEntry> = withContext(Dispatchers.IO) {
         try {
             persistReadPermission(uri)
-            val previous = load()
+            val previous = loadFromStorage()
             val updated = updateQrImageHistory(
                 entries = previous,
                 newEntry = QrImageHistoryEntry(
@@ -67,7 +71,7 @@ internal class QrImageHistoryStore(context: Context) {
             )
             releaseRemovedPermissions(previous, updated)
             save(updated)
-            return updated
+            updated
         } catch (exception: Exception) {
             deleteManagedImage(uri)
             throw exception
@@ -107,18 +111,19 @@ internal class QrImageHistoryStore(context: Context) {
         Uri.fromFile(file)
     }
 
-    fun remove(uriString: String): List<QrImageHistoryEntry> {
-        val previous = load()
-        val updated = previous.filterNot { entry ->
-            entry.uriString == uriString
+    suspend fun remove(uriString: String): List<QrImageHistoryEntry> =
+        withContext(Dispatchers.IO) {
+            val previous = loadFromStorage()
+            val updated = previous.filterNot { entry ->
+                entry.uriString == uriString
+            }
+            releaseRemovedPermissions(previous, updated)
+            save(updated)
+            updated
         }
-        releaseRemovedPermissions(previous, updated)
-        save(updated)
-        return updated
-    }
 
-    fun clear() {
-        val previous = load()
+    suspend fun clear() = withContext(Dispatchers.IO) {
+        val previous = loadFromStorage()
         previous.forEach { entry ->
             releaseReadPermission(entry.uriString.toUri())
         }

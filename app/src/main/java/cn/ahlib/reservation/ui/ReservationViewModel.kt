@@ -352,7 +352,7 @@ class ReservationViewModel(
     private val readerQrCodeRepository: ReaderQrCodeRepository,
     private val locationProvider: DeviceLocationProvider,
     private val shouldUseMockLocation: () -> Boolean,
-    private val queueCalendarReminder: (
+    private val queueCalendarReminder: suspend (
         roomName: String,
         venueName: String,
         reservationDateTime: String,
@@ -1624,7 +1624,7 @@ class ReservationViewModel(
         }
     }
 
-    private fun acceptProfile(profile: UserInfo) {
+    private suspend fun acceptProfile(profile: UserInfo) {
         if (profile.mobileStatus?.trim() == UNBOUND_MOBILE_STATUS) {
             beginPhoneBinding(profile)
         } else {
@@ -1654,7 +1654,7 @@ class ReservationViewModel(
         refreshPhoneCaptcha()
     }
 
-    private fun beginAuthenticated(
+    private suspend fun beginAuthenticated(
         profile: UserInfo,
         @StringRes messageId: Int? = null,
     ) {
@@ -2391,7 +2391,7 @@ class ReservationViewModel(
         private val readerQrCodeRepository: ReaderQrCodeRepository,
         private val locationProvider: DeviceLocationProvider,
         private val shouldUseMockLocation: () -> Boolean,
-        private val queueCalendarReminder: (
+        private val queueCalendarReminder: suspend (
             roomName: String,
             venueName: String,
             reservationDateTime: String,

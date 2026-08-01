@@ -65,11 +65,13 @@ class AppUpdateManager(
     private val scope: CoroutineScope,
 ) {
     private val appContext = context.applicationContext
-    private val gson = Gson()
-    private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
-        .build()
+    private val gson by lazy { Gson() }
+    private val httpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+    }
     private val preferences by lazy {
         appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     }

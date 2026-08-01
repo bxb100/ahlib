@@ -31,12 +31,14 @@ class ReservationApplication : Application() {
         locationProvider = DeviceLocationProvider(this)
         automationManager = AutomationManager(
             context = this,
+            backgroundScope = applicationScope,
         )
         appUpdateManager = AppUpdateManager(
             context = this,
             scope = applicationScope,
         )
-        applicationScope.launch {
+        applicationScope.launch(Dispatchers.IO) {
+            automationManager.initialize()
             automationManager.sync()
         }
     }

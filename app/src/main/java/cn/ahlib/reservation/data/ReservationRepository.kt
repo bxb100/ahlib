@@ -385,7 +385,7 @@ class ReservationRepository internal constructor(
     private suspend fun <Envelope, Result> safeCall(
         call: suspend () -> Envelope,
         transform: (Envelope) -> ApiResult<Result>,
-    ): ApiResult<Result> =
+    ): ApiResult<Result> = withContext(Dispatchers.IO) {
         try {
             transform(call())
         } catch (exception: CancellationException) {
@@ -430,6 +430,7 @@ class ReservationRepository internal constructor(
                 ),
             )
         }
+    }
 
     private fun validationFailure(message: String): ApiResult.Failure =
         ApiResult.Failure(
