@@ -303,17 +303,6 @@ fun AutomationSettingsScreen(
                 }
             }
 
-            item(key = "mock-location") {
-                SettingsCard {
-                    SettingSwitchRow(
-                        title = stringResource(R.string.mock_location_title),
-                        description = stringResource(R.string.mock_location_description),
-                        checked = settings.mockLocationEnabled,
-                        onCheckedChange = onMockLocationEnabledChange,
-                    )
-                }
-            }
-
             item(key = "automatic-sign-out") {
                 SettingsCard {
                     Text(
@@ -382,6 +371,17 @@ fun AutomationSettingsScreen(
                             Text(stringResource(R.string.automatic_sign_out_clear_qr))
                         }
                     }
+                }
+            }
+
+            item(key = "mock-location") {
+                SettingsCard {
+                    SettingSwitchRow(
+                        title = stringResource(R.string.mock_location_title),
+                        description = stringResource(R.string.mock_location_description),
+                        checked = settings.mockLocationEnabled,
+                        onCheckedChange = onMockLocationEnabledChange,
+                    )
                 }
             }
 

@@ -260,13 +260,40 @@ private fun Uri.isTrustedLibraryUrl(): Boolean =
             hostName == "lib.ah.cn" || hostName.endsWith(".lib.ah.cn")
         } == true
 
-// The source page's zero-height root scroll layout prevents this background
-// from receiving its own composited layer in Android WebView.
-private const val FOOTER_COMPOSITING_FIX_SCRIPT = """
+// The persistent rule also covers footer nodes replaced by the source page's
+// client-side router without another main-frame navigation.
+internal const val FOOTER_COMPOSITING_FIX_SCRIPT = """
     (() => {
-        const footer = document.querySelector('.wap-footer');
-        if (footer) {
-            footer.style.transform = 'translateZ(0)';
+        const styleId = 'ahlib-footer-compositing-fix';
+        const installStyle = () => {
+            if (document.getElementById(styleId)) {
+                return;
+            }
+            const parent = document.head || document.documentElement;
+            if (!parent) {
+                return;
+            }
+            const style = document.createElement('style');
+            style.id = styleId;
+            style.textContent = `
+                .wap-footer {
+                    -webkit-transform: translateZ(0) !important;
+                    transform: translateZ(0) !important;
+                    -webkit-backface-visibility: hidden !important;
+                    backface-visibility: hidden !important;
+                }
+            `;
+            parent.appendChild(style);
+        };
+
+        installStyle();
+        if (!window.__ahlibFooterCompositingFixObserver) {
+            const observer = new MutationObserver(() => installStyle());
+            observer.observe(document.documentElement, {
+                childList: true,
+                subtree: true,
+            });
+            window.__ahlibFooterCompositingFixObserver = observer;
         }
     })()
 """
