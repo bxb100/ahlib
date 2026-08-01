@@ -43,6 +43,10 @@
     <string name="nav_reservations">\u6211\u7684\u9884\u7ea6</string>
     <string name="nav_scanner">\u626b\u7801</string>
     <string name="nav_profile">\u6211\u7684</string>
+    <string name="open_quick_actions">\u6253\u5f00\u5feb\u6377\u64cd\u4f5c</string>
+    <string name="close_quick_actions">\u5173\u95ed\u5feb\u6377\u64cd\u4f5c</string>
+    <string name="quick_scan">\u5feb\u901f\u626b\u7801</string>
+    <string name="reservations_web_view">\u6211\u7684\u9884\u7ea6\u7f51\u9875\u7248</string>
     <string name="room_search">\u641c\u7d22\u7a7a\u95f4\u540d\u79f0</string>
     <string name="search">\u641c\u7d22</string>
     <string name="clear_search">\u6e05\u9664\u641c\u7d22</string>

@@ -15,14 +15,19 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.EventNote
+import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MeetingRoom
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Public
 import androidx.compose.material.icons.outlined.QrCodeScanner
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.FloatingActionButtonMenu
+import androidx.compose.material3.FloatingActionButtonMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -34,6 +39,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.ToggleFloatingActionButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -280,7 +286,10 @@ private fun StartupContent(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalMaterial3ExpressiveApi::class,
+)
 @Composable
 private fun AuthenticatedContent(
     state: ReservationUiState,
@@ -297,8 +306,10 @@ private fun AuthenticatedContent(
     val automationSettings by automationManager.settings.collectAsStateWithLifecycle()
     val automationLogs by automationManager.logs.collectAsStateWithLifecycle()
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.PROFILE) }
+    var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedTab) {
+        fabMenuExpanded = false
         if (state.selectedTab != AuthenticatedTab.PROFILE) {
             profilePage = ProfilePage.PROFILE
         }
@@ -486,6 +497,81 @@ private fun AuthenticatedContent(
                         },
                         label = {
                             Text(stringResource(tab.titleResource()))
+                        },
+                    )
+                }
+            }
+        },
+        floatingActionButton = {
+            if (state.selectedTab != AuthenticatedTab.SCANNER) {
+                FloatingActionButtonMenu(
+                    expanded = fabMenuExpanded,
+                    button = {
+                        ToggleFloatingActionButton(
+                            checked = fabMenuExpanded,
+                            onCheckedChange = { fabMenuExpanded = it },
+                        ) {
+                            Icon(
+                                imageVector = if (fabMenuExpanded) {
+                                    Icons.Outlined.Close
+                                } else {
+                                    Icons.Outlined.QrCodeScanner
+                                },
+                                contentDescription = stringResource(
+                                    if (fabMenuExpanded) {
+                                        R.string.close_quick_actions
+                                    } else {
+                                        R.string.open_quick_actions
+                                    },
+                                ),
+                            )
+                        }
+                    },
+                ) {
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            viewModel.selectTab(AuthenticatedTab.SCANNER)
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.QrCodeScanner,
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text(stringResource(R.string.quick_scan)) },
+                    )
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            context.startActivity(
+                                Intent(context, LibraryWebViewActivity::class.java),
+                            )
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Public,
+                                contentDescription = null,
+                            )
+                        },
+                        text = {
+                            Text(stringResource(R.string.reservations_web_view))
+                        },
+                    )
+                    FloatingActionButtonMenuItem(
+                        onClick = {
+                            fabMenuExpanded = false
+                            profilePage = ProfilePage.AUTOMATION
+                            viewModel.selectTab(AuthenticatedTab.PROFILE)
+                        },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = null,
+                            )
+                        },
+                        text = {
+                            Text(stringResource(R.string.automation_settings_title))
                         },
                     )
                 }
