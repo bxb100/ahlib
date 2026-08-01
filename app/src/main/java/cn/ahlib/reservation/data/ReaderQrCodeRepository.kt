@@ -2,6 +2,7 @@ package cn.ahlib.reservation.data
 
 import android.content.Context
 import android.graphics.BitmapFactory
+import androidx.core.content.edit
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -16,8 +17,13 @@ import okhttp3.Request
 
 enum class ReaderQrCodeFailure {
     INVALID_PAGE_URL,
+    SESSION_EXPIRED,
     NETWORK,
+    TLS,
     HTTP,
+    INVALID_RESPONSE,
+    BUSINESS,
+    NATIVE_UNAVAILABLE,
     QR_IMAGE_NOT_FOUND,
     QR_CONTENT_INVALID,
 }
@@ -25,10 +31,16 @@ enum class ReaderQrCodeFailure {
 sealed interface ReaderQrCodeResult {
     data class Success(val content: String) : ReaderQrCodeResult
 
-    data class Failure(val reason: ReaderQrCodeFailure) : ReaderQrCodeResult
+    data class Failure(
+        val reason: ReaderQrCodeFailure,
+        val message: String? = null,
+    ) : ReaderQrCodeResult
 }
 
-class ReaderQrCodeRepository(context: Context) {
+class ReaderQrCodeRepository internal constructor(
+    context: Context,
+    private val nativeClient: ReaderQrNativeClient,
+) {
     private val preferences = context.applicationContext.getSharedPreferences(
         PREFERENCES_NAME,
         Context.MODE_PRIVATE,
@@ -66,11 +78,40 @@ class ReaderQrCodeRepository(context: Context) {
         ) {
             return
         }
-        preferences.edit()
-            .remove(KEY_READER_ID)
-            .remove(KEY_CONTENT)
-            .remove(KEY_IMAGE_URL)
-            .apply()
+        preferences.edit {
+            remove(KEY_READER_ID)
+            remove(KEY_CONTENT)
+            remove(KEY_IMAGE_URL)
+        }
+    }
+
+    suspend fun refreshAndCache(
+        readerId: String,
+        cookieHeader: String,
+    ): ReaderQrCodeResult = withContext(Dispatchers.IO) {
+        val normalizedReaderId = readerId.trim()
+        if (normalizedReaderId.isEmpty() || cookieHeader.isBlank()) {
+            return@withContext ReaderQrCodeResult.Failure(
+                ReaderQrCodeFailure.SESSION_EXPIRED,
+            )
+        }
+        when (val result = nativeClient.fetch(cookieHeader)) {
+            is ReaderQrCodeResult.Success -> {
+                if (!canEncodeReaderQrCode(result.content)) {
+                    return@withContext ReaderQrCodeResult.Failure(
+                        ReaderQrCodeFailure.QR_CONTENT_INVALID,
+                    )
+                }
+                preferences.edit {
+                    putString(KEY_READER_ID, normalizedReaderId)
+                    putString(KEY_CONTENT, result.content)
+                    remove(KEY_IMAGE_URL)
+                }
+                result
+            }
+
+            is ReaderQrCodeResult.Failure -> result
+        }
     }
 
     suspend fun resolveAndCache(
@@ -117,11 +158,11 @@ class ReaderQrCodeRepository(context: Context) {
                 ?: return@withContext ReaderQrCodeResult.Failure(
                     ReaderQrCodeFailure.QR_CONTENT_INVALID,
                 )
-            preferences.edit()
-                .putString(KEY_READER_ID, normalizedReaderId)
-                .putString(KEY_CONTENT, content)
-                .remove(KEY_IMAGE_URL)
-                .apply()
+            preferences.edit {
+                putString(KEY_READER_ID, normalizedReaderId)
+                putString(KEY_CONTENT, content)
+                remove(KEY_IMAGE_URL)
+            }
             ReaderQrCodeResult.Success(content)
         } catch (_: IOException) {
             ReaderQrCodeResult.Failure(ReaderQrCodeFailure.NETWORK)

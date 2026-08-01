@@ -22,8 +22,11 @@ class AppContainer(
         backgroundScope.launch(Dispatchers.IO) {
             clearDeprecatedReaderAccountHistory(appContext)
         }
-        readerQrCodeRepository = ReaderQrCodeRepository(appContext)
         val gson = GsonFactory.create()
+        readerQrCodeRepository = ReaderQrCodeRepository(
+            context = appContext,
+            nativeClient = JniReaderQrNativeClient(appContext, gson),
+        )
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
         val okHttpClient = OkHttpClient.Builder()
             .cookieJar(cookieJar)

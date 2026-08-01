@@ -6,6 +6,7 @@ import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import retrofit2.HttpException
 
@@ -127,6 +128,11 @@ class ReservationRepository internal constructor(
             }
         }
     }
+
+    internal fun authenticationCookieHeader(): String? =
+        cookieJar.loadForRequest(AUTHENTICATION_COOKIE_URL.toHttpUrl())
+            .firstOrNull { cookie -> cookie.name == AUTHENTICATION_COOKIE_NAME }
+            ?.let { cookie -> "${cookie.name}=${cookie.value}" }
 
     suspend fun sendMessageCode(
         mobile: String,
@@ -449,6 +455,7 @@ class ReservationRepository internal constructor(
     }
 
     private companion object {
+        const val AUTHENTICATION_COOKIE_URL = "https://www.lib.ah.cn/"
         val LOGIN_RETENTION_DAYS = setOf(2, 15, 30)
         const val SESSION_EXPIRED_CODE = 401
         const val CATEGORY_CACHE_MILLIS = 10L * 60L * 1_000L

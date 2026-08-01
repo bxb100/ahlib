@@ -1019,11 +1019,14 @@ fun ProfileScreen(
     readerQrPageUrl: String,
     appVersionName: String,
     isSavingReaderQr: Boolean,
+    isRefreshingReaderQr: Boolean,
+    isReaderQrStale: Boolean,
     isCheckingUpdate: Boolean,
     readerQrErrorText: String?,
     isLoggingOut: Boolean,
     onReaderQrPageUrlChange: (String) -> Unit,
     onSaveReaderQrPageUrl: () -> Unit,
+    onRefreshReaderQrCode: () -> Unit,
     onClearReaderQrBinding: () -> Unit,
     onOpenReaderQrCode: () -> Unit,
     onOpenAutomation: () -> Unit,
@@ -1033,7 +1036,7 @@ fun ProfileScreen(
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
     var showReaderQrEditor by rememberSaveable { mutableStateOf(false) }
-    var wasSavingReaderQr by remember { mutableStateOf(false) }
+    var wasBindingReaderQr by remember { mutableStateOf(false) }
     val missingValue = stringResource(R.string.not_provided)
     val readerStatusResource = readerStatusLabelResource(profile?.readerStatus)
     val readerStatusValue = if (readerStatusResource != null) {
@@ -1051,18 +1054,20 @@ fun ProfileScreen(
 
     LaunchedEffect(
         isSavingReaderQr,
+        isRefreshingReaderQr,
         readerQrContent,
         readerQrErrorText,
     ) {
+        val isBindingReaderQr = isSavingReaderQr || isRefreshingReaderQr
         if (
-            wasSavingReaderQr &&
-            !isSavingReaderQr &&
+            wasBindingReaderQr &&
+            !isBindingReaderQr &&
             readerQrContent != null &&
             readerQrErrorText == null
         ) {
             showReaderQrEditor = false
         }
-        wasSavingReaderQr = isSavingReaderQr
+        wasBindingReaderQr = isBindingReaderQr
     }
 
     LazyColumn(
@@ -1122,6 +1127,47 @@ fun ProfileScreen(
                                 content = readerQrContent,
                                 onClick = onOpenReaderQrCode,
                             )
+                        }
+                    }
+                    if (isRefreshingReaderQr) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(
+                                MaterialTheme.spacing.small,
+                            ),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            LoadingIndicator(modifier = Modifier.size(18.dp))
+                            Text(
+                                text = stringResource(R.string.reader_qr_refreshing),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    if (isReaderQrStale) {
+                        Text(
+                            text = stringResource(R.string.reader_qr_stale_warning),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (readerQrErrorText != null && !isRefreshingReaderQr) {
+                        Text(
+                            text = readerQrErrorText,
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(
+                                MaterialTheme.spacing.small,
+                            ),
+                        ) {
+                            TextButton(onClick = onRefreshReaderQrCode) {
+                                Text(stringResource(R.string.retry))
+                            }
+                            TextButton(onClick = { showReaderQrEditor = true }) {
+                                Text(stringResource(R.string.reader_qr_manual_binding))
+                            }
                         }
                     }
                 }
@@ -1208,9 +1254,11 @@ fun ProfileScreen(
         ReaderQrBindingDialog(
             pageUrl = readerQrPageUrl,
             isSaving = isSavingReaderQr,
+            isFetching = isRefreshingReaderQr,
             errorText = readerQrErrorText,
             onPageUrlChange = onReaderQrPageUrlChange,
             onSave = onSaveReaderQrPageUrl,
+            onFetch = onRefreshReaderQrCode,
             onDismiss = { showReaderQrEditor = false },
         )
     }

@@ -1,3 +1,4 @@
+import com.android.build.api.variant.ApplicationAndroidComponentsExtension
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -11,6 +12,23 @@ val releaseVersionCode = providers.gradleProperty("releaseVersionCode")
     .getOrElse(1)
 val releaseVersionName = providers.gradleProperty("releaseVersionName")
     .getOrElse("1.0.0")
+val readerQrNativeRoot = rootProject.layout.projectDirectory.dir("native/reader-qr-native")
+val readerQrNativeManifest = readerQrNativeRoot.file("Cargo.toml")
+val readerQrNativeOutput = layout.buildDirectory.dir("generated/readerQrNative/jniLibs")
+val readerQrNativePrebuilt = layout.projectDirectory.dir("prebuilt/readerQrNative/jniLibs")
+val forcePrebuiltReaderQrNative = providers.gradleProperty("usePrebuiltReaderQrNative")
+    .map(String::toBoolean)
+    .getOrElse(false)
+val buildReaderQrNativeFromSource =
+    readerQrNativeManifest.asFile.isFile && !forcePrebuiltReaderQrNative
+val readerQrNativeJniLibs = if (buildReaderQrNativeFromSource) {
+    readerQrNativeOutput.get().asFile
+} else {
+    readerQrNativePrebuilt.asFile
+}
+val rustlsPlatformVerifierAar = layout.projectDirectory.file(
+    "libs/rustls-platform-verifier-0.1.1.aar",
+)
 
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
@@ -19,6 +37,7 @@ android {
     namespace = "cn.ahlib.reservation"
     compileSdk = 37
     buildToolsVersion = "37.0.0"
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "cn.ahlib.reservation"
@@ -109,6 +128,50 @@ android {
             isIncludeAndroidResources = true
         }
     }
+
+    sourceSets.getByName("main").jniLibs.directories.add(
+        readerQrNativeJniLibs.absolutePath,
+    )
+}
+
+val buildReaderQrNative = if (buildReaderQrNativeFromSource) {
+    val androidComponents = extensions.getByType<ApplicationAndroidComponentsExtension>()
+    tasks.register<Exec>("buildReaderQrNative") {
+        val nativeLibrary = readerQrNativeOutput.map { output ->
+            output.file("arm64-v8a/libreader_qr_native.so")
+        }
+        inputs.files(
+            fileTree(readerQrNativeRoot) {
+                exclude("target/**")
+            },
+        )
+        outputs.file(nativeLibrary)
+        workingDir(readerQrNativeRoot)
+        environment(
+            "ANDROID_HOME",
+            androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath,
+        )
+        commandLine(
+            "cargo",
+            "ndk",
+            "-t",
+            "arm64-v8a",
+            "-P",
+            "35",
+            "-o",
+            readerQrNativeOutput.get().asFile.absolutePath,
+            "build",
+            "--release",
+        )
+    }
+} else {
+    null
+}
+
+tasks.named("preBuild").configure {
+    if (buildReaderQrNative != null) {
+        dependsOn(buildReaderQrNative)
+    }
 }
 
 dependencies {
@@ -135,6 +198,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
     implementation(libs.kotlinx.coroutines.android)
+    implementation(files(rustlsPlatformVerifierAar.asFile))
 
     implementation(libs.androidx.camera.core)
     implementation(libs.androidx.camera.camera2)

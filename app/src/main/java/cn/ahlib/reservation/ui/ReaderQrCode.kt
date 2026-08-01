@@ -17,22 +17,28 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.QrCode2
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -126,7 +132,10 @@ internal fun ReaderQrCode(
 @Composable
 internal fun ReaderQrCodeViewer(
     content: String,
+    isRefreshing: Boolean,
+    isStale: Boolean,
     onDismiss: () -> Unit,
+    onRefresh: () -> Unit,
     onClearBinding: () -> Unit,
 ) {
     val matrix = remember(content) { encodeReaderQrCode(content) }
@@ -157,6 +166,21 @@ internal fun ReaderQrCodeViewer(
                             }
                         },
                         actions = {
+                            IconButton(
+                                onClick = onRefresh,
+                                enabled = !isRefreshing,
+                            ) {
+                                if (isRefreshing) {
+                                    LoadingIndicator(modifier = Modifier.size(20.dp))
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Refresh,
+                                        contentDescription = stringResource(
+                                            R.string.reader_qr_refresh,
+                                        ),
+                                    )
+                                }
+                            }
                             TextButton(
                                 onClick = onClearBinding,
                                 colors = ButtonDefaults.textButtonColors(
@@ -208,6 +232,20 @@ internal fun ReaderQrCodeViewer(
                         style = MaterialTheme.typography.labelSmall,
                         textAlign = TextAlign.Center,
                     )
+                    if (isStale) {
+                        Text(
+                            text = stringResource(R.string.reader_qr_stale_warning),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = MaterialTheme.spacing.screen,
+                                    vertical = MaterialTheme.spacing.extraSmall,
+                                ),
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.labelSmall,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
                 }
             }
         }
@@ -345,14 +383,21 @@ private const val MAX_QR_SCALE = 5f
 internal fun ReaderQrBindingDialog(
     pageUrl: String,
     isSaving: Boolean,
+    isFetching: Boolean,
     errorText: String?,
     onPageUrlChange: (String) -> Unit,
     onSave: () -> Unit,
+    onFetch: () -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val isBusy = isSaving || isFetching
+    var selectedAuthorizationTab by rememberSaveable {
+        mutableIntStateOf(AUTHORIZATION_TAB_LOGIN)
+    }
+
     AlertDialog(
         onDismissRequest = {
-            if (!isSaving) {
+            if (!isBusy) {
                 onDismiss()
             }
         },
@@ -361,65 +406,136 @@ internal fun ReaderQrBindingDialog(
             Column(
                 verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
             ) {
-                Text(
-                    text = stringResource(R.string.reader_qr_link_instructions),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-                OutlinedTextField(
-                    value = pageUrl,
-                    onValueChange = onPageUrlChange,
-                    modifier = Modifier.fillMaxWidth(),
-                    enabled = !isSaving,
-                    label = { Text(stringResource(R.string.reader_qr_page_url)) },
-                    placeholder = {
-                        Text(stringResource(R.string.reader_qr_page_url_hint))
-                    },
-                    supportingText = errorText?.let { message ->
-                        { Text(message) }
-                    },
-                    isError = errorText != null,
-                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                        keyboardType = KeyboardType.Uri,
-                    ),
-                    minLines = 3,
-                    maxLines = 5,
-                )
+                SecondaryTabRow(
+                    selectedTabIndex = selectedAuthorizationTab,
+                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                ) {
+                    Tab(
+                        selected = selectedAuthorizationTab == AUTHORIZATION_TAB_LOGIN,
+                        onClick = {
+                            selectedAuthorizationTab = AUTHORIZATION_TAB_LOGIN
+                        },
+                        enabled = !isBusy,
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = {
+                            Text(stringResource(R.string.reader_qr_authorization_login))
+                        },
+                    )
+                    Tab(
+                        selected = selectedAuthorizationTab == AUTHORIZATION_TAB_MANUAL,
+                        onClick = {
+                            selectedAuthorizationTab = AUTHORIZATION_TAB_MANUAL
+                        },
+                        enabled = !isBusy,
+                        selectedContentColor = MaterialTheme.colorScheme.primary,
+                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = {
+                            Text(stringResource(R.string.reader_qr_authorization_manual))
+                        },
+                    )
+                }
+                if (selectedAuthorizationTab == AUTHORIZATION_TAB_LOGIN) {
+                    Text(
+                        text = stringResource(R.string.reader_qr_auto_fetch_description),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    FilledTonalButton(
+                        onClick = onFetch,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                    ) {
+                        if (isFetching) {
+                            LoadingIndicator(modifier = Modifier.size(18.dp))
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.QrCode2,
+                                contentDescription = null,
+                            )
+                        }
+                        Text(
+                            text = stringResource(
+                                if (isFetching) {
+                                    R.string.reader_qr_auto_fetching
+                                } else {
+                                    R.string.reader_qr_auto_fetch
+                                },
+                            ),
+                            modifier = Modifier.padding(start = MaterialTheme.spacing.small),
+                        )
+                    }
+                } else {
+                    Text(
+                        text = stringResource(R.string.reader_qr_link_instructions),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    OutlinedTextField(
+                        value = pageUrl,
+                        onValueChange = onPageUrlChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isBusy,
+                        label = { Text(stringResource(R.string.reader_qr_page_url)) },
+                        placeholder = {
+                            Text(stringResource(R.string.reader_qr_page_url_hint))
+                        },
+                        isError = errorText != null,
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                            keyboardType = KeyboardType.Uri,
+                        ),
+                        minLines = 3,
+                        maxLines = 5,
+                    )
+                }
+                if (errorText != null) {
+                    Text(
+                        text = errorText,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = onSave,
-                enabled = pageUrl.isNotBlank() && !isSaving,
-            ) {
-                if (isSaving) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(18.dp),
+            if (selectedAuthorizationTab == AUTHORIZATION_TAB_MANUAL) {
+                TextButton(
+                    onClick = onSave,
+                    enabled = pageUrl.isNotBlank() && !isBusy,
+                ) {
+                    if (isSaving) {
+                        LoadingIndicator(
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Text(
+                        text = stringResource(
+                            if (isSaving) {
+                                R.string.reader_qr_saving
+                            } else {
+                                R.string.reader_qr_save
+                            },
+                        ),
+                        modifier = if (isSaving) {
+                            Modifier.padding(start = MaterialTheme.spacing.small)
+                        } else {
+                            Modifier
+                        },
                     )
                 }
-                Text(
-                    text = stringResource(
-                        if (isSaving) {
-                            R.string.reader_qr_saving
-                        } else {
-                            R.string.reader_qr_save
-                        },
-                    ),
-                    modifier = if (isSaving) {
-                        Modifier.padding(start = MaterialTheme.spacing.small)
-                    } else {
-                        Modifier
-                    },
-                )
             }
         },
         dismissButton = {
             TextButton(
                 onClick = onDismiss,
-                enabled = !isSaving,
+                enabled = !isBusy,
             ) {
                 Text(stringResource(R.string.cancel))
             }
         },
     )
 }
+
+private const val AUTHORIZATION_TAB_LOGIN = 0
+private const val AUTHORIZATION_TAB_MANUAL = 1

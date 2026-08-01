@@ -656,11 +656,14 @@ private fun AuthenticatedContent(
                 readerQrPageUrl = state.readerQrCode.pageUrlInput,
                 appVersionName = BuildConfig.VERSION_NAME,
                 isSavingReaderQr = state.readerQrCode.isSaving,
+                isRefreshingReaderQr = state.readerQrCode.isRefreshing,
+                isReaderQrStale = state.readerQrCode.isStale,
                 isCheckingUpdate = isCheckingUpdate,
                 readerQrErrorText = state.readerQrCode.error?.resolve(),
                 isLoggingOut = state.isLoggingOut,
                 onReaderQrPageUrlChange = viewModel::updateReaderQrPageUrl,
                 onSaveReaderQrPageUrl = viewModel::saveReaderQrPageUrl,
+                onRefreshReaderQrCode = viewModel::refreshReaderQrCode,
                 onClearReaderQrBinding = viewModel::clearReaderQrCodeBinding,
                 onOpenReaderQrCode = { showReaderQrCodeViewer = true },
                 onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
@@ -675,7 +678,10 @@ private fun AuthenticatedContent(
         state.readerQrCode.content?.let { content ->
             ReaderQrCodeViewer(
                 content = content,
+                isRefreshing = state.readerQrCode.isRefreshing,
+                isStale = state.readerQrCode.isStale,
                 onDismiss = { showReaderQrCodeViewer = false },
+                onRefresh = viewModel::refreshReaderQrCode,
                 onClearBinding = {
                     showReaderQrCodeViewer = false
                     viewModel.clearReaderQrCodeBinding()

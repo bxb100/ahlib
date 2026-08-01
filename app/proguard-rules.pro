@@ -1,6 +1,7 @@
 -keepattributes Signature
 -keepattributes *Annotation*
 -keep class cn.ahlib.reservation.data.** { *; }
+-keep,includedescriptorclasses class org.rustls.platformverifier.** { *; }
 -keep class cn.ahlib.reservation.update.GitHubRelease { *; }
 -keep class cn.ahlib.reservation.update.GitHubReleaseAsset { *; }
 # ML Kit instantiates its ComponentRegistrar implementations via reflection
