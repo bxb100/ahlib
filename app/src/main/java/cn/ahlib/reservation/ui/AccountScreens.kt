@@ -976,7 +976,7 @@ private fun ScannerImageHistory(
 fun ProfileScreen(
     profile: UserInfo?,
     readerId: String,
-    readerQrImageUrl: String?,
+    readerQrContent: String?,
     readerQrPageUrl: String,
     appVersionName: String,
     isSavingReaderQr: Boolean,
@@ -986,6 +986,7 @@ fun ProfileScreen(
     onReaderQrPageUrlChange: (String) -> Unit,
     onSaveReaderQrPageUrl: () -> Unit,
     onClearReaderQrBinding: () -> Unit,
+    onOpenReaderQrCode: () -> Unit,
     onOpenAutomation: () -> Unit,
     onCheckUpdate: () -> Unit,
     onLogout: () -> Unit,
@@ -1011,13 +1012,13 @@ fun ProfileScreen(
 
     LaunchedEffect(
         isSavingReaderQr,
-        readerQrImageUrl,
+        readerQrContent,
         readerQrErrorText,
     ) {
         if (
             wasSavingReaderQr &&
             !isSavingReaderQr &&
-            readerQrImageUrl != null &&
+            readerQrContent != null &&
             readerQrErrorText == null
         ) {
             showReaderQrEditor = false
@@ -1073,14 +1074,14 @@ fun ProfileScreen(
                                 value = readerStatusValue,
                             )
                         }
-                        if (readerQrImageUrl == null) {
+                        if (readerQrContent == null) {
                             ReaderQrCodeUnbound(
                                 onClick = { showReaderQrEditor = true },
                             )
                         } else {
-                            ReaderQrCodeImage(
-                                imageUrl = readerQrImageUrl,
-                                onClearBinding = onClearReaderQrBinding,
+                            ReaderQrCode(
+                                content = readerQrContent,
+                                onClick = onOpenReaderQrCode,
                             )
                         }
                     }

@@ -1,6 +1,7 @@
 package cn.ahlib.reservation.data
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import java.io.IOException
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
@@ -18,10 +19,11 @@ enum class ReaderQrCodeFailure {
     NETWORK,
     HTTP,
     QR_IMAGE_NOT_FOUND,
+    QR_CONTENT_INVALID,
 }
 
 sealed interface ReaderQrCodeResult {
-    data class Success(val imageUrl: String) : ReaderQrCodeResult
+    data class Success(val content: String) : ReaderQrCodeResult
 
     data class Failure(val reason: ReaderQrCodeFailure) : ReaderQrCodeResult
 }
@@ -40,7 +42,7 @@ class ReaderQrCodeRepository(context: Context) {
         .writeTimeout(REQUEST_TIMEOUT_SECONDS, TimeUnit.SECONDS)
         .build()
 
-    fun cachedImageUrl(readerId: String): String? {
+    fun cachedContent(readerId: String): String? {
         val normalizedReaderId = readerId.trim()
         if (
             normalizedReaderId.isEmpty() ||
@@ -49,13 +51,11 @@ class ReaderQrCodeRepository(context: Context) {
             return null
         }
         return preferences
-            .getString(KEY_IMAGE_URL, null)
-            ?.toHttpUrlOrNull()
-            ?.takeIf(HttpUrl::isAllowedQrImageUrl)
-            ?.toString()
+            .getString(KEY_CONTENT, null)
+            ?.takeIf(::canEncodeReaderQrCode)
     }
 
-    fun clearCachedImageUrl(readerId: String) {
+    fun clearCachedContent(readerId: String) {
         val normalizedReaderId = readerId.trim()
         if (
             normalizedReaderId.isEmpty() ||
@@ -65,6 +65,7 @@ class ReaderQrCodeRepository(context: Context) {
         }
         preferences.edit()
             .remove(KEY_READER_ID)
+            .remove(KEY_CONTENT)
             .remove(KEY_IMAGE_URL)
             .apply()
     }
@@ -98,11 +99,27 @@ class ReaderQrCodeRepository(context: Context) {
             ) ?: return@withContext ReaderQrCodeResult.Failure(
                 ReaderQrCodeFailure.QR_IMAGE_NOT_FOUND,
             )
+            val imageBytes = fetchQrImage(
+                url = imageUrl.toHttpUrlOrNull()
+                    ?: return@withContext ReaderQrCodeResult.Failure(
+                        ReaderQrCodeFailure.QR_IMAGE_NOT_FOUND,
+                    ),
+                referer = page.url,
+                redirectsRemaining = MAX_REDIRECTS,
+            ) ?: return@withContext ReaderQrCodeResult.Failure(
+                ReaderQrCodeFailure.HTTP,
+            )
+            val content = decodeReaderQrImage(imageBytes)
+                ?.takeIf(::canEncodeReaderQrCode)
+                ?: return@withContext ReaderQrCodeResult.Failure(
+                    ReaderQrCodeFailure.QR_CONTENT_INVALID,
+                )
             preferences.edit()
                 .putString(KEY_READER_ID, normalizedReaderId)
-                .putString(KEY_IMAGE_URL, imageUrl)
+                .putString(KEY_CONTENT, content)
+                .remove(KEY_IMAGE_URL)
                 .apply()
-            ReaderQrCodeResult.Success(imageUrl)
+            ReaderQrCodeResult.Success(content)
         } catch (_: IOException) {
             ReaderQrCodeResult.Failure(ReaderQrCodeFailure.NETWORK)
         }
@@ -146,6 +163,60 @@ class ReaderQrCodeRepository(context: Context) {
         }
     }
 
+    private fun fetchQrImage(
+        url: HttpUrl,
+        referer: HttpUrl,
+        redirectsRemaining: Int,
+    ): ByteArray? {
+        val request = Request.Builder()
+            .url(url)
+            .header("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+            .header("Referer", referer.toString())
+            .header("User-Agent", USER_AGENT)
+            .build()
+        client.newCall(request).execute().use { response ->
+            if (response.code in 300..399) {
+                if (redirectsRemaining <= 0) {
+                    return null
+                }
+                val redirectUrl = response.header("Location")
+                    ?.let(url::resolve)
+                    ?.takeIf(HttpUrl::isAllowedQrImageUrl)
+                    ?: return null
+                return fetchQrImage(
+                    url = redirectUrl,
+                    referer = referer,
+                    redirectsRemaining = redirectsRemaining - 1,
+                )
+            }
+            if (!response.isSuccessful) {
+                return null
+            }
+            val bytes = response.body.byteStream().readNBytes(MAX_IMAGE_BYTES + 1)
+            return bytes.takeIf { image -> image.size <= MAX_IMAGE_BYTES }
+        }
+    }
+
+    private fun decodeReaderQrImage(bytes: ByteArray): String? {
+        val bounds = BitmapFactory.Options().apply {
+            inJustDecodeBounds = true
+        }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (
+            bounds.outWidth !in 1..MAX_IMAGE_DIMENSION ||
+            bounds.outHeight !in 1..MAX_IMAGE_DIMENSION
+        ) {
+            return null
+        }
+        val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?: return null
+        return try {
+            decodeReaderQrCode(bitmap)
+        } finally {
+            bitmap.recycle()
+        }
+    }
+
     private class InMemoryCookieJar : CookieJar {
         private val cookies = mutableListOf<Cookie>()
 
@@ -179,10 +250,13 @@ class ReaderQrCodeRepository(context: Context) {
     private companion object {
         const val PREFERENCES_NAME = "reader_qr_code"
         const val KEY_READER_ID = "reader_id"
+        const val KEY_CONTENT = "content"
         const val KEY_IMAGE_URL = "image_url"
         const val REQUEST_TIMEOUT_SECONDS = 15L
         const val MAX_REDIRECTS = 5
         const val MAX_PAGE_BYTES = 1_000_000
+        const val MAX_IMAGE_BYTES = 4_000_000
+        const val MAX_IMAGE_DIMENSION = 2_048
         const val USER_AGENT =
             "Mozilla/5.0 (Linux; Android 15) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36"

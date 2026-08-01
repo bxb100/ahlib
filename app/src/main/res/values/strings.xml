@@ -136,6 +136,7 @@
     <string name="reader_status_cancelled">\u5f53\u524d\u8bfb\u8005\u8bc1\u5df2\u6ce8\u9500</string>
     <string name="reader_qr_description">\u6211\u7684\u8bfb\u8005\u8bc1\u4e8c\u7ef4\u7801\uff0c\u70b9\u51fb\u653e\u5927</string>
     <string name="reader_qr_description_expanded">\u653e\u5927\u7684\u8bfb\u8005\u8bc1\u4e8c\u7ef4\u7801</string>
+    <string name="reader_qr_title">\u4e8c\u7ef4\u7801\u7535\u5b50\u8bc1</string>
     <string name="reader_qr_unbound">\u5f85\u7ed1\u5b9a</string>
     <string name="reader_qr_bind">\u7ed1\u5b9a\u8bfb\u8005\u8bc1\u4e8c\u7ef4\u7801</string>
     <string name="reader_qr_clear_binding">\u6e05\u9664\u7ed1\u5b9a</string>
@@ -151,6 +152,7 @@
     <string name="reader_qr_error_network">\u65e0\u6cd5\u8bfb\u53d6\u7f51\u9875\uff0c\u8bf7\u68c0\u67e5\u7f51\u7edc\u540e\u91cd\u8bd5</string>
     <string name="reader_qr_error_http">\u8bfb\u8005\u8bc1\u7f51\u9875\u6682\u65f6\u65e0\u6cd5\u8bbf\u95ee\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5</string>
     <string name="reader_qr_error_not_found">\u7f51\u9875\u4e2d\u672a\u627e\u5230\u8bfb\u8005\u8bc1\u4e8c\u7ef4\u7801\uff0c\u8bf7\u786e\u8ba4\u94fe\u63a5\u4ecd\u7136\u6709\u6548</string>
+    <string name="reader_qr_error_parse">\u65e0\u6cd5\u89e3\u6790\u7f51\u9875\u4e2d\u7684\u8bfb\u8005\u8bc1\u4e8c\u7ef4\u7801\uff0c\u8bf7\u91cd\u65b0\u590d\u5236\u94fe\u63a5\u540e\u91cd\u8bd5</string>
     <string name="close">\u5173\u95ed</string>
     <string name="logout">\u9000\u51fa\u767b\u5f55</string>
     <string name="logout_confirm_title">\u786e\u8ba4\u9000\u51fa\u767b\u5f55</string>

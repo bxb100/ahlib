@@ -19,6 +19,7 @@ import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MeetingRoom
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Public
+import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material.icons.outlined.QrCodeScanner
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.AlertDialog
@@ -307,11 +308,14 @@ private fun AuthenticatedContent(
     val automationLogs by automationManager.logs.collectAsStateWithLifecycle()
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.PROFILE) }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    var showReaderQrCodeViewer by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(state.selectedTab) {
         fabMenuExpanded = false
-        if (state.selectedTab != AuthenticatedTab.PROFILE) {
-            profilePage = ProfilePage.PROFILE
+    }
+    LaunchedEffect(state.readerQrCode.content) {
+        if (state.readerQrCode.content == null) {
+            showReaderQrCodeViewer = false
         }
     }
     LaunchedEffect(state.reservationList.reservations) {
@@ -320,47 +324,45 @@ private fun AuthenticatedContent(
         }
     }
 
-    if (state.selectedTab == AuthenticatedTab.PROFILE) {
-        when (profilePage) {
-            ProfilePage.AUTOMATION -> {
-                AutomationSettingsScreen(
-                    settings = automationSettings,
-                    onBack = { profilePage = ProfilePage.PROFILE },
-                    onAutoBookingEnabledChange =
-                        automationManager::setAutoBookingEnabled,
-                    onCancellationEnabledChange =
-                        automationManager::setCancellationEnabled,
-                    onCancellationLeadMinutesChange =
-                        automationManager::setCancellationLeadMinutes,
-                    onAutomaticSignOutQrImageSelected =
-                        automationManager::configureAutomaticSignOutQrImage,
-                    onClearAutomaticSignOutQrImage =
-                        automationManager::clearAutomaticSignOutQrImage,
-                    onMockLocationEnabledChange =
-                        automationManager::setMockLocationEnabled,
-                    onOpenLogs = { profilePage = ProfilePage.LOGS },
-                    canScheduleExactAlarms =
-                        automationManager::canScheduleExactAlarms,
-                    canShowCancellationNotifications =
-                        automationManager::canShowCancellationNotifications,
-                    onSystemAccessChanged = automationManager::sync,
-                    modifier = modifier,
-                )
-                return
-            }
-
-            ProfilePage.LOGS -> {
-                AutomationLogScreen(
-                    entries = automationLogs,
-                    onBack = { profilePage = ProfilePage.AUTOMATION },
-                    onClear = automationManager::clearLogs,
-                    modifier = modifier,
-                )
-                return
-            }
-
-            ProfilePage.PROFILE -> Unit
+    when (profilePage) {
+        ProfilePage.AUTOMATION -> {
+            AutomationSettingsScreen(
+                settings = automationSettings,
+                onBack = { profilePage = ProfilePage.PROFILE },
+                onAutoBookingEnabledChange =
+                    automationManager::setAutoBookingEnabled,
+                onCancellationEnabledChange =
+                    automationManager::setCancellationEnabled,
+                onCancellationLeadMinutesChange =
+                    automationManager::setCancellationLeadMinutes,
+                onAutomaticSignOutQrImageSelected =
+                    automationManager::configureAutomaticSignOutQrImage,
+                onClearAutomaticSignOutQrImage =
+                    automationManager::clearAutomaticSignOutQrImage,
+                onMockLocationEnabledChange =
+                    automationManager::setMockLocationEnabled,
+                onOpenLogs = { profilePage = ProfilePage.LOGS },
+                canScheduleExactAlarms =
+                    automationManager::canScheduleExactAlarms,
+                canShowCancellationNotifications =
+                    automationManager::canShowCancellationNotifications,
+                onSystemAccessChanged = automationManager::sync,
+                modifier = modifier,
+            )
+            return
         }
+
+        ProfilePage.LOGS -> {
+            AutomationLogScreen(
+                entries = automationLogs,
+                onBack = { profilePage = ProfilePage.AUTOMATION },
+                onClear = automationManager::clearLogs,
+                modifier = modifier,
+            )
+            return
+        }
+
+        ProfilePage.PROFILE -> Unit
     }
 
     if (
@@ -541,6 +543,23 @@ private fun AuthenticatedContent(
                         },
                         text = { Text(stringResource(R.string.quick_scan)) },
                     )
+                    if (state.readerQrCode.content != null) {
+                        FloatingActionButtonMenuItem(
+                            onClick = {
+                                fabMenuExpanded = false
+                                showReaderQrCodeViewer = true
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.QrCode2,
+                                    contentDescription = null,
+                                )
+                            },
+                            text = {
+                                Text(stringResource(R.string.reader_qr_title))
+                            },
+                        )
+                    }
                     FloatingActionButtonMenuItem(
                         onClick = {
                             fabMenuExpanded = false
@@ -562,7 +581,6 @@ private fun AuthenticatedContent(
                         onClick = {
                             fabMenuExpanded = false
                             profilePage = ProfilePage.AUTOMATION
-                            viewModel.selectTab(AuthenticatedTab.PROFILE)
                         },
                         icon = {
                             Icon(
@@ -624,7 +642,7 @@ private fun AuthenticatedContent(
             AuthenticatedTab.PROFILE -> ProfileScreen(
                 profile = state.profile,
                 readerId = state.login.readerId,
-                readerQrImageUrl = state.readerQrCode.imageUrl,
+                readerQrContent = state.readerQrCode.content,
                 readerQrPageUrl = state.readerQrCode.pageUrlInput,
                 appVersionName = BuildConfig.VERSION_NAME,
                 isSavingReaderQr = state.readerQrCode.isSaving,
@@ -634,10 +652,24 @@ private fun AuthenticatedContent(
                 onReaderQrPageUrlChange = viewModel::updateReaderQrPageUrl,
                 onSaveReaderQrPageUrl = viewModel::saveReaderQrPageUrl,
                 onClearReaderQrBinding = viewModel::clearReaderQrCodeBinding,
+                onOpenReaderQrCode = { showReaderQrCodeViewer = true },
                 onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
                 onCheckUpdate = onCheckUpdate,
                 onLogout = viewModel::logout,
                 modifier = contentModifier,
+            )
+        }
+    }
+
+    if (showReaderQrCodeViewer) {
+        state.readerQrCode.content?.let { content ->
+            ReaderQrCodeViewer(
+                content = content,
+                onDismiss = { showReaderQrCodeViewer = false },
+                onClearBinding = {
+                    showReaderQrCodeViewer = false
+                    viewModel.clearReaderQrCodeBinding()
+                },
             )
         }
     }

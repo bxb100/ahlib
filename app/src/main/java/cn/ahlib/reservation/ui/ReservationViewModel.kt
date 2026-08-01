@@ -243,7 +243,7 @@ data class ScannerUiState(
 }
 
 data class ReaderQrCodeUiState(
-    val imageUrl: String? = null,
+    val content: String? = null,
     val pageUrlInput: String = "",
     val isSaving: Boolean = false,
     val error: UiText? = null,
@@ -537,7 +537,7 @@ class ReservationViewModel(
                     _uiState.update { current ->
                         current.copy(
                             readerQrCode = ReaderQrCodeUiState(
-                                imageUrl = result.imageUrl,
+                                content = result.content,
                             ),
                             message = newMessage(R.string.reader_qr_saved),
                         )
@@ -572,7 +572,7 @@ class ReservationViewModel(
         }
         readerQrRequestId++
         readerQrCodeJob?.cancel()
-        readerQrCodeRepository.clearCachedImageUrl(readerId)
+        readerQrCodeRepository.clearCachedContent(readerId)
         _uiState.update { current ->
             current.copy(
                 readerQrCode = ReaderQrCodeUiState(),
@@ -1672,7 +1672,7 @@ class ReservationViewModel(
             selectedTab = AuthenticatedTab.ROOMS,
             login = LoginUiState(readerId = readerId),
             readerQrCode = ReaderQrCodeUiState(
-                imageUrl = readerQrCodeRepository.cachedImageUrl(readerId),
+                content = readerQrCodeRepository.cachedContent(readerId),
             ),
             message = messageId?.let(::newMessage),
         )
@@ -2359,6 +2359,8 @@ class ReservationViewModel(
                 ReaderQrCodeFailure.HTTP -> R.string.reader_qr_error_http
                 ReaderQrCodeFailure.QR_IMAGE_NOT_FOUND ->
                     R.string.reader_qr_error_not_found
+                ReaderQrCodeFailure.QR_CONTENT_INVALID ->
+                    R.string.reader_qr_error_parse
             },
         )
 
