@@ -29,6 +29,9 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables.useSupportLibrary = true
+        ndk {
+            abiFilters += "arm64-v8a"
+        }
         buildConfigField(
             "String",
             "API_BASE_URL",
@@ -40,6 +43,13 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+                "proguard-debug-rules.pro",
+            )
             val debugApiBaseUrl = providers.gradleProperty("debugApiBaseUrl")
                 .orElse(productionApiBaseUrl)
                 .get()
@@ -83,6 +93,12 @@ android {
     }
 
     packaging {
+        dex {
+            useLegacyPackaging = true
+        }
+        jniLibs {
+            useLegacyPackaging = true
+        }
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
@@ -115,7 +131,6 @@ dependencies {
     implementation(libs.retrofit.core)
     implementation(libs.retrofit.gson)
     implementation(libs.okhttp.core)
-    implementation(libs.okhttp.logging)
     implementation(libs.gson)
     implementation(libs.coil.compose)
     implementation(libs.coil.network.okhttp)
