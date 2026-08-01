@@ -43,7 +43,6 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,6 +50,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -245,7 +245,7 @@ fun ReservationsScreen(
                                 ),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                CircularProgressIndicator(
+                                LoadingIndicator(
                                     modifier = Modifier.size(20.dp),
                                 )
                                 Text(stringResource(R.string.loading_more))
@@ -492,9 +492,8 @@ private fun ReservationCard(
                             ),
                         ) {
                             if (isCancelling) {
-                                CircularProgressIndicator(
+                                LoadingIndicator(
                                     modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
                                 )
                                 Spacer(modifier = Modifier.size(8.dp))
                             }
@@ -799,7 +798,7 @@ fun ScannerScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         if (operationActive || isImageScanning) {
-                            CircularProgressIndicator()
+                            LoadingIndicator()
                         }
                         Text(
                             text = when {
@@ -962,9 +961,8 @@ private fun ScannerImageHistory(
                             modifier = Modifier.fillMaxSize(),
                             color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.42f),
                         ) {}
-                        CircularProgressIndicator(
+                        LoadingIndicator(
                             modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
                             color = MaterialTheme.colorScheme.inversePrimary,
                         )
                     }
@@ -1109,9 +1107,8 @@ fun ProfileScreen(
                 enabled = !isCheckingUpdate,
             ) {
                 if (isCheckingUpdate) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
                     )
                     Spacer(modifier = Modifier.size(8.dp))
                     Text(stringResource(R.string.app_update_checking))
@@ -1143,9 +1140,8 @@ fun ProfileScreen(
                 ),
             ) {
                 if (isLoggingOut) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
                     )
                     Spacer(modifier = Modifier.size(8.dp))
                     Text(stringResource(R.string.logging_out))

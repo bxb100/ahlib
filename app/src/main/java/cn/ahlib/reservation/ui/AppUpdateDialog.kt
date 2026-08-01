@@ -2,18 +2,21 @@ package cn.ahlib.reservation.ui
 
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -69,10 +72,15 @@ fun AppUpdateDialog(
                     is UpdateDialogState.Downloading -> {
                         val percent = dialogState.progressPercent
                         if (percent != null) {
-                            LinearProgressIndicator(
-                                progress = { percent / 100f },
+                            Box(
                                 modifier = Modifier.fillMaxWidth(),
-                            )
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularWavyProgressIndicator(
+                                    progress = { percent / 100f },
+                                    modifier = Modifier.size(48.dp),
+                                )
+                            }
                             Text(
                                 text = stringResource(
                                     R.string.app_update_downloading_percent,
@@ -82,7 +90,14 @@ fun AppUpdateDialog(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         } else {
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            Box(
+                                modifier = Modifier.fillMaxWidth(),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularWavyProgressIndicator(
+                                    modifier = Modifier.size(48.dp),
+                                )
+                            }
                             Text(
                                 text = stringResource(R.string.app_update_downloading),
                                 style = MaterialTheme.typography.bodySmall,

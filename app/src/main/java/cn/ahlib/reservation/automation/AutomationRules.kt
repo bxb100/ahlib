@@ -4,6 +4,7 @@ import cn.ahlib.reservation.data.AppointmentRecord
 import cn.ahlib.reservation.data.AvailabilityDay
 import cn.ahlib.reservation.data.AvailabilitySlot
 import cn.ahlib.reservation.data.isSelectableForReservation
+import cn.ahlib.reservation.data.isSignedIn
 import java.text.ParsePosition
 import java.text.SimpleDateFormat
 import java.time.LocalDate
@@ -117,6 +118,32 @@ internal fun calculateNextAutoBookingCheckAt(
         timeInMillis = window.denseStartAtMillis
         add(Calendar.DAY_OF_YEAR, 1)
     }.timeInMillis
+}
+
+internal fun calculateNextAutomaticSignOutAt(
+    nowMillis: Long,
+    timeZone: TimeZone = AUTOMATION_TIME_ZONE,
+): Long {
+    val trigger = Calendar.getInstance(timeZone).apply {
+        timeInMillis = nowMillis
+        set(Calendar.HOUR_OF_DAY, AUTO_SIGN_OUT_HOUR)
+        set(Calendar.MINUTE, AUTO_SIGN_OUT_MINUTE)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+        if (timeInMillis <= nowMillis) {
+            add(Calendar.DAY_OF_YEAR, 1)
+        }
+    }
+    return trigger.timeInMillis
+}
+
+internal fun selectAutomaticSignOutReservation(
+    records: List<AppointmentRecord>,
+    currentRoomReservation: AppointmentRecord?,
+): AppointmentRecord? = currentRoomReservation?.takeIf { current ->
+    current.isSignedIn() && records.any { record ->
+        record.id == current.id && record.isSignedIn()
+    }
 }
 
 internal fun hasMatchingActiveReservation(
@@ -245,6 +272,8 @@ private const val AUTO_BOOKING_DENSE_END_MINUTE = 1
 private const val AUTO_BOOKING_DENSE_END_SECOND = 0
 private const val AUTO_BOOKING_FINISH_HOUR = 10
 private const val AUTO_BOOKING_FINISH_MINUTE = 0
+private const val AUTO_SIGN_OUT_HOUR = 21
+private const val AUTO_SIGN_OUT_MINUTE = 50
 private const val AUTO_BOOKING_FINISH_SECOND = 0
 private const val MINIMUM_AUTO_BOOKING_TRIGGER_DELAY_MILLIS = 1_000L
 internal const val AUTO_BOOKING_SPARSE_INTERVAL_MILLIS = 3L * MINUTE_MILLIS

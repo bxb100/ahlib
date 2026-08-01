@@ -21,6 +21,8 @@ class AutomationWorker(
             repository = application.appContainer.repository,
             preferences = application.automationManager.preferences,
             scheduler = application.automationManager.scheduler,
+            automaticCancellationPrompt =
+                application.automationManager.automaticCancellationPrompt,
             queueCalendarReminder =
                 application.automationManager::queueCalendarReminder,
         )
@@ -28,6 +30,7 @@ class AutomationWorker(
             when (task) {
                 AutomationTask.AUTO_BOOK -> engine.runAutoBooking()
                 AutomationTask.CANCELLATION_CHECK -> engine.runCancellationCheck()
+                AutomationTask.AUTO_SIGN_OUT -> engine.runAutomaticSignOut()
             }
         } catch (exception: CancellationException) {
             throw exception

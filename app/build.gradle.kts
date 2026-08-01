@@ -76,6 +76,9 @@ android {
             freeCompilerArgs.add(
                 "-opt-in=androidx.compose.foundation.style.ExperimentalFoundationStyleApi",
             )
+            freeCompilerArgs.add(
+                "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+            )
         }
     }
 

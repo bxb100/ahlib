@@ -2,10 +2,14 @@ package cn.ahlib.reservation.automation
 
 import android.app.NotificationManager
 import android.content.Context
+import android.net.Uri
 import cn.ahlib.reservation.calendar.CalendarReminderStore
 import cn.ahlib.reservation.calendar.ReservationCalendarReminder
 import cn.ahlib.reservation.data.AvailabilitySlot
 import cn.ahlib.reservation.data.RoomDetail
+import cn.ahlib.reservation.scanner.QrImageScanError
+import cn.ahlib.reservation.scanner.QrImageScanResult
+import cn.ahlib.reservation.scanner.scanQrCodeFromImage
 import kotlinx.coroutines.flow.StateFlow
 
 class AutomationManager(
@@ -13,7 +17,11 @@ class AutomationManager(
 ) {
     internal val preferences = AutomationPreferences(context)
     internal val scheduler = AutomationScheduler(context, preferences)
+    internal val automaticCancellationPrompt =
+        AutomaticCancellationNotificationPrompt(context)
     private val calendarReminderStore = CalendarReminderStore(context)
+    private val automaticSignOutQrStore = AutomaticSignOutQrStore(context)
+    private val appContext = context.applicationContext
 
     val settings: StateFlow<AutomationSettings> = preferences.settings
     val logs: StateFlow<List<AutomationLogEntry>> = AutomationLog.entries
@@ -88,6 +96,41 @@ class AutomationManager(
         )
     }
 
+    suspend fun configureAutomaticSignOutQrImage(
+        imageUri: Uri,
+    ): QrImageScanResult {
+        val scanResult = scanQrCodeFromImage(appContext, imageUri)
+        if (scanResult is QrImageScanResult.Failure) {
+            return scanResult
+        }
+        val code = (scanResult as QrImageScanResult.Success).code
+        val storedImageUri = try {
+            automaticSignOutQrStore.replaceImage(imageUri)
+        } catch (exception: Exception) {
+            return QrImageScanResult.Failure(
+                QrImageScanError.ImageFailure(exception),
+            )
+        }
+        preferences.setAutomaticSignOutQrCode(
+            AutomaticSignOutQrCode(
+                roomId = code.roomId,
+                imageUri = storedImageUri.toString(),
+            ),
+        )
+        scheduler.sync()
+        AutomationLog.info(
+            "Automatic sign-out QR image configured for room ${code.roomId}.",
+        )
+        return scanResult
+    }
+
+    fun clearAutomaticSignOutQrImage() {
+        preferences.clearAutomaticSignOutQrCode()
+        scheduler.sync()
+        automaticSignOutQrStore.clear()
+        AutomationLog.info("Automatic sign-out QR image cleared.")
+    }
+
     fun setMockLocationEnabled(enabled: Boolean) {
         preferences.setMockLocationEnabled(enabled)
         AutomationLog.info(
@@ -107,6 +150,9 @@ class AutomationManager(
     }
 
     fun canScheduleExactAlarms(): Boolean = scheduler.canScheduleExactAlarms()
+
+    fun canShowCancellationNotifications(): Boolean =
+        automaticCancellationPrompt.canShowNotifications()
 
     internal fun queueCalendarReminder(
         roomName: String,
@@ -140,7 +186,6 @@ class AutomationManager(
         context.applicationContext
             .getSystemService(NotificationManager::class.java)
             .apply {
-                cancelAll()
                 deleteNotificationChannel(LEGACY_BOOKING_NOTIFICATION_CHANNEL)
                 deleteNotificationChannel(LEGACY_REMINDER_NOTIFICATION_CHANNEL)
             }

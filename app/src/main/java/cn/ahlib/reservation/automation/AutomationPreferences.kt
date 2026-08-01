@@ -51,6 +51,22 @@ class AutomationPreferences(context: Context) {
     }
 
     @Synchronized
+    fun setAutomaticSignOutQrCode(qrCode: AutomaticSignOutQrCode) {
+        updateSettings {
+            putString(KEY_AUTO_SIGN_OUT_ROOM_ID, qrCode.roomId)
+            putString(KEY_AUTO_SIGN_OUT_IMAGE_URI, qrCode.imageUri)
+        }
+    }
+
+    @Synchronized
+    fun clearAutomaticSignOutQrCode() {
+        updateSettings {
+            remove(KEY_AUTO_SIGN_OUT_ROOM_ID)
+            remove(KEY_AUTO_SIGN_OUT_IMAGE_URI)
+        }
+    }
+
+    @Synchronized
     fun setTarget(target: AutoBookingTarget) {
         updateSettings {
             putString(KEY_TARGET_ROOM_ID, target.roomId)
@@ -104,6 +120,20 @@ class AutomationPreferences(context: Context) {
                 false,
             ),
             target = target,
+            automaticSignOutQrCode = readAutomaticSignOutQrCode(),
+        )
+    }
+
+    private fun readAutomaticSignOutQrCode(): AutomaticSignOutQrCode? {
+        val roomId = preferences.getString(KEY_AUTO_SIGN_OUT_ROOM_ID, null)
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        val imageUri = preferences.getString(KEY_AUTO_SIGN_OUT_IMAGE_URI, null)
+            ?.takeIf(String::isNotBlank)
+            ?: return null
+        return AutomaticSignOutQrCode(
+            roomId = roomId,
+            imageUri = imageUri,
         )
     }
 
@@ -134,6 +164,8 @@ class AutomationPreferences(context: Context) {
         const val KEY_CANCELLATION_ENABLED = "cancellation_enabled"
         const val KEY_CANCELLATION_LEAD_MINUTES = "cancellation_lead_minutes"
         const val KEY_MOCK_LOCATION_ENABLED = "mock_location_enabled"
+        const val KEY_AUTO_SIGN_OUT_ROOM_ID = "auto_sign_out_room_id"
+        const val KEY_AUTO_SIGN_OUT_IMAGE_URI = "auto_sign_out_image_uri"
         const val KEY_TARGET_ROOM_ID = "target_room_id"
         const val KEY_TARGET_ROOM_NAME = "target_room_name"
         const val KEY_TARGET_VENUE_NAME = "target_venue_name"

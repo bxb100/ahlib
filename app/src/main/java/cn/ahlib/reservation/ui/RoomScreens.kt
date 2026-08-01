@@ -41,12 +41,12 @@ import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -102,6 +102,7 @@ import cn.ahlib.reservation.ui.theme.spacing
 import java.util.GregorianCalendar
 import kotlinx.coroutines.delay
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoomsScreen(
     rooms: List<RoomSummary>,
@@ -183,7 +184,7 @@ fun RoomsScreen(
                     enabled = !isLoading && !isRefreshing,
                 ) {
                     if (isRefreshing) {
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        LoadingIndicator(modifier = Modifier.size(24.dp))
                     } else {
                         Icon(
                             imageVector = Icons.Outlined.Refresh,
@@ -194,76 +195,92 @@ fun RoomsScreen(
             }
         }
 
-        when {
-            isLoading && rooms.isEmpty() -> {
-                LoadingContent(modifier = Modifier.fillMaxSize())
-            }
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
+            modifier = Modifier.weight(1f),
+        ) {
+            when {
+                isLoading && rooms.isEmpty() -> {
+                    LoadingContent(modifier = Modifier.fillMaxSize())
+                }
 
-            errorText != null && rooms.isEmpty() -> {
-                ErrorContent(
-                    message = errorText,
-                    onRetry = onRetry,
-                    modifier = Modifier.fillMaxSize(),
-                )
-            }
-
-            rooms.isEmpty() -> {
-                EmptyContent(
-                    text = stringResource(R.string.room_empty),
-                    modifier = Modifier.fillMaxSize(),
-                    actionLabel = stringResource(R.string.refresh),
-                    onAction = onRefresh,
-                )
-            }
-
-            else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = MaterialTheme.spacing.screen,
-                        top = MaterialTheme.spacing.extraSmall,
-                        end = MaterialTheme.spacing.screen,
-                        bottom = MaterialTheme.spacing.section,
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
-                ) {
-                    if (errorText != null) {
-                        item(key = "room-list-error") {
-                            InlineErrorMessage(
+                errorText != null && rooms.isEmpty() -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item(key = "room-list-error-empty") {
+                            ErrorContent(
                                 message = errorText,
-                                actionLabel = stringResource(R.string.retry),
-                                onAction = onRetry,
+                                onRetry = onRetry,
+                                modifier = Modifier.fillParentMaxSize(),
                             )
                         }
                     }
-                    items(
-                        items = rooms,
-                        key = { room -> room.id },
-                    ) { room ->
-                        RoomCard(
-                            room = room,
-                            onClick = { onOpenRoom(room) },
-                        )
+                }
+
+                rooms.isEmpty() -> {
+                    LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        item(key = "room-list-empty") {
+                            EmptyContent(
+                                text = stringResource(R.string.room_empty),
+                                modifier = Modifier.fillParentMaxSize(),
+                                actionLabel = stringResource(R.string.refresh),
+                                onAction = onRefresh,
+                            )
+                        }
                     }
-                    if (canLoadMore || isLoadingMore) {
-                        item(key = "room-load-more") {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 8.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                if (isLoadingMore) {
-                                    Row(
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        CircularProgressIndicator(modifier = Modifier.size(20.dp))
-                                        Text(stringResource(R.string.loading_more))
-                                    }
-                                } else {
-                                    OutlinedButton(onClick = onLoadMore) {
-                                        Text(stringResource(R.string.load_more))
+                }
+
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            start = MaterialTheme.spacing.screen,
+                            top = MaterialTheme.spacing.extraSmall,
+                            end = MaterialTheme.spacing.screen,
+                            bottom = MaterialTheme.spacing.section,
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
+                    ) {
+                        if (errorText != null) {
+                            item(key = "room-list-error") {
+                                InlineErrorMessage(
+                                    message = errorText,
+                                    actionLabel = stringResource(R.string.retry),
+                                    onAction = onRetry,
+                                )
+                            }
+                        }
+                        items(
+                            items = rooms,
+                            key = { room -> room.id },
+                        ) { room ->
+                            RoomCard(
+                                room = room,
+                                onClick = { onOpenRoom(room) },
+                            )
+                        }
+                        if (canLoadMore || isLoadingMore) {
+                            item(key = "room-load-more") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 8.dp),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    if (isLoadingMore) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                        ) {
+                                            LoadingIndicator(
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                            Text(stringResource(R.string.loading_more))
+                                        }
+                                    } else {
+                                        OutlinedButton(onClick = onLoadMore) {
+                                            Text(stringResource(R.string.load_more))
+                                        }
                                     }
                                 }
                             }
@@ -1229,9 +1246,8 @@ private fun BookingConfirmationDialog(
                 enabled = canSubmit,
             ) {
                 if (isBooking) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(stringResource(R.string.booking_in_progress))
@@ -1377,7 +1393,7 @@ private fun ResilientRoomImage(
         when (imageState) {
             AsyncImagePainter.State.Empty,
             is AsyncImagePainter.State.Loading,
-            -> CircularProgressIndicator(modifier = Modifier.size(28.dp))
+            -> LoadingIndicator(modifier = Modifier.size(28.dp))
 
             is AsyncImagePainter.State.Error -> {
                 Column(

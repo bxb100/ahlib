@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -28,7 +31,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -43,6 +50,7 @@ import cn.ahlib.reservation.R
 internal const val LIBRARY_RESERVATIONS_URL =
     "https://www.lib.ah.cn/myLibrary?menuIndex=1"
 internal const val LIBRARY_WEB_VIEW_CLOSE_TEST_TAG = "library-web-view-close"
+internal const val LIBRARY_WEB_VIEW_MENU_TEST_TAG = "library-web-view-menu"
 internal const val LIBRARY_WEB_VIEW_REFRESH_TEST_TAG = "library-web-view-refresh"
 internal const val LIBRARY_WEB_VIEW_TEST_TAG = "library-web-view"
 
@@ -86,6 +94,8 @@ private fun LibraryWebViewBrowserBar(
     onClose: () -> Unit,
     onRefresh: () -> Unit,
 ) {
+    var menuExpanded by rememberSaveable { mutableStateOf(false) }
+
     Surface(
         color = BrowserChrome,
         shadowElevation = 1.dp,
@@ -130,19 +140,43 @@ private fun LibraryWebViewBrowserBar(
                     lineHeight = 16.sp,
                 )
             }
-            IconButton(
-                onClick = onRefresh,
+            Box(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp)
-                    .testTag(LIBRARY_WEB_VIEW_REFRESH_TEST_TAG),
+                    .padding(end = 4.dp),
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.MoreHoriz,
-                    contentDescription = stringResource(R.string.library_web_view_refresh),
-                    modifier = Modifier.size(24.dp),
-                    tint = BrowserChromeText,
-                )
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.testTag(LIBRARY_WEB_VIEW_MENU_TEST_TAG),
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.MoreHoriz,
+                        contentDescription = stringResource(
+                            R.string.library_web_view_more_options,
+                        ),
+                        modifier = Modifier.size(24.dp),
+                        tint = BrowserChromeText,
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false },
+                ) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.library_web_view_refresh)) },
+                        onClick = {
+                            menuExpanded = false
+                            onRefresh()
+                        },
+                        modifier = Modifier.testTag(LIBRARY_WEB_VIEW_REFRESH_TEST_TAG),
+                        leadingIcon = {
+                            Icon(
+                                imageVector = Icons.Outlined.Refresh,
+                                contentDescription = null,
+                            )
+                        },
+                    )
+                }
             }
         }
     }

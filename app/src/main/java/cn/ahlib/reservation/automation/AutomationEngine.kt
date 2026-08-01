@@ -5,6 +5,7 @@ import cn.ahlib.reservation.data.ApiResult
 import cn.ahlib.reservation.data.AppointmentRecord
 import cn.ahlib.reservation.data.CreateReservationRequest
 import cn.ahlib.reservation.data.ReservationRepository
+import cn.ahlib.reservation.data.RoomSignOffRequest
 import cn.ahlib.reservation.data.isCancellationEligible
 import cn.ahlib.reservation.data.isPendingCheckIn
 import kotlin.random.Random
@@ -14,6 +15,7 @@ internal class AutomationEngine(
     private val repository: ReservationRepository,
     private val preferences: AutomationPreferences,
     private val scheduler: AutomationScheduler,
+    private val automaticCancellationPrompt: AutomaticCancellationPrompt,
     private val queueCalendarReminder: (
         roomName: String,
         venueName: String,
@@ -187,6 +189,14 @@ internal class AutomationEngine(
             is ReservationLoadResult.Success -> result.records
             is ReservationLoadResult.Failure -> return result.result
         }
+        automaticCancellationPrompt.retainActiveReservationIds(
+            reservations
+                .asSequence()
+                .filter(AppointmentRecord::isPendingCheckIn)
+                .map(AppointmentRecord::id)
+                .filter(String::isNotBlank)
+                .toSet(),
+        )
         val now = System.currentTimeMillis()
         var nextCheckAt: Long? = null
         var retryRequired = false
@@ -211,15 +221,68 @@ internal class AutomationEngine(
                 if (!record.isCancellationEligible()) {
                     return@forEach
                 }
-                when (val result = repository.cancelReservation(record.id)) {
+                if (record.id.isBlank()) {
+                    AutomationLog.warning(
+                        "Skipped a reservation with no identifier.",
+                    )
+                    return@forEach
+                }
+                when (automaticCancellationPrompt.awaitDecision(record)) {
+                    AutomaticCancellationDecision.USER_CANCELLED -> {
+                        AutomationLog.warning(
+                            "Automatic cancellation was stopped by the user for " +
+                                "reservation ${record.id}.",
+                        )
+                        return@forEach
+                    }
+
+                    AutomaticCancellationDecision.NOTIFICATION_UNAVAILABLE -> {
+                        AutomationLog.warning(
+                            "Automatic cancellation skipped reservation ${record.id} " +
+                                "because notifications are unavailable.",
+                        )
+                        return@forEach
+                    }
+
+                    AutomaticCancellationDecision.PROCEED -> Unit
+                }
+                if (!preferences.settings.value.cancellationEnabled) {
+                    AutomationLog.info(
+                        "Automatic cancellation was disabled during the countdown.",
+                    )
+                    return@forEach
+                }
+                val currentRecord = when (val result = loadAllReservations()) {
+                    is ReservationLoadResult.Success -> result.records
+                        .firstOrNull { candidate -> candidate.id == record.id }
+
+                    is ReservationLoadResult.Failure -> {
+                        retryRequired = retryRequired ||
+                            result.result == AutomationRunResult.Retry
+                        return@forEach
+                    }
+                }
+                if (
+                    currentRecord == null ||
+                    !currentRecord.isPendingCheckIn() ||
+                    !currentRecord.isCancellationEligible()
+                ) {
+                    AutomationLog.info(
+                        "Reservation ${record.id} changed during the countdown; " +
+                            "automatic cancellation skipped.",
+                    )
+                    return@forEach
+                }
+                when (val result = repository.cancelReservation(currentRecord.id)) {
                     is ApiResult.Success -> AutomationLog.success(
-                        "Cancelled unsigned reservation ${record.id} for " +
-                            "${record.roomName.orEmpty()} on ${record.bookDate.orEmpty()}.",
+                        "Cancelled unsigned reservation ${currentRecord.id} for " +
+                            "${currentRecord.roomName.orEmpty()} on " +
+                            "${currentRecord.bookDate.orEmpty()}.",
                     )
 
                     is ApiResult.Failure -> {
                         val failure = result.exception.toAutomationFailure(
-                            "Unable to cancel reservation ${record.id}",
+                            "Unable to cancel reservation ${currentRecord.id}",
                         )
                         retryRequired = retryRequired ||
                             failure == AutomationRunResult.Retry
@@ -238,6 +301,67 @@ internal class AutomationEngine(
             AutomationRunResult.Retry
         } else {
             AutomationRunResult.Success
+        }
+    }
+
+    suspend fun runAutomaticSignOut(): AutomationRunResult {
+        val qrCode = preferences.settings.value.automaticSignOutQrCode
+        if (qrCode == null) {
+            AutomationLog.info(
+                "Automatic sign-out skipped because no QR image is configured.",
+            )
+            return AutomationRunResult.Success
+        }
+
+        AutomationLog.info("Checking signed-in reservations for automatic sign-out.")
+        val reservations = when (val result = loadAllReservations()) {
+            is ReservationLoadResult.Success -> result.records
+            is ReservationLoadResult.Failure -> return result.result
+        }
+        val currentRoomReservation = when (
+            val result = repository.getCurrentReservation(qrCode.roomId)
+        ) {
+            is ApiResult.Success -> result.data
+            is ApiResult.Failure -> return result.exception.toAutomationFailure(
+                "Unable to load the reservation for the automatic sign-out QR code",
+            )
+        }
+        val reservation = selectAutomaticSignOutReservation(
+            records = reservations,
+            currentRoomReservation = currentRoomReservation,
+        )
+        if (reservation == null) {
+            AutomationLog.info(
+                "No signed-in reservation matched the automatic sign-out QR code.",
+            )
+            return AutomationRunResult.Success
+        }
+        if (preferences.settings.value.automaticSignOutQrCode != qrCode) {
+            AutomationLog.info(
+                "Automatic sign-out QR configuration changed during the check.",
+            )
+            return AutomationRunResult.Success
+        }
+
+        return when (
+            val result = repository.roomSignOff(
+                RoomSignOffRequest(
+                    id = reservation.id,
+                    bookingId = reservation.bookingId,
+                ),
+            )
+        ) {
+            is ApiResult.Success -> {
+                AutomationLog.success(
+                    "Automatically signed out reservation ${reservation.id} for " +
+                        "${reservation.roomName.orEmpty()}.",
+                )
+                AutomationRunResult.Success
+            }
+
+            is ApiResult.Failure -> result.exception.toAutomationFailure(
+                "Unable to sign out reservation ${reservation.id}",
+            )
         }
     }
 

@@ -17,8 +17,16 @@ class AutomationAlarmReceiver : BroadcastReceiver() {
             }
             ?: return
         val application = context.applicationContext as ReservationApplication
-        if (task == AutomationTask.AUTO_BOOK) {
-            application.automationManager.scheduler.scheduleFollowingAutoBookingCheck()
+        when (task) {
+            AutomationTask.AUTO_BOOK ->
+                application.automationManager.scheduler
+                    .scheduleFollowingAutoBookingCheck()
+
+            AutomationTask.AUTO_SIGN_OUT ->
+                application.automationManager.scheduler
+                    .scheduleNextAutomaticSignOut()
+
+            AutomationTask.CANCELLATION_CHECK -> Unit
         }
         application.automationManager.scheduler.enqueue(task)
     }

@@ -3,10 +3,15 @@ package cn.ahlib.reservation.ui.theme
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.style.Style
 import androidx.compose.foundation.style.StyleScope
+import androidx.compose.foundation.style.animate
+import androidx.compose.foundation.style.border
+import androidx.compose.foundation.style.contentPadding
 import androidx.compose.foundation.style.fillWidth
 import androidx.compose.foundation.style.focused
 import androidx.compose.foundation.style.hovered
 import androidx.compose.foundation.style.pressed
+import androidx.compose.foundation.style.scale
+import androidx.compose.foundation.style.transformOrigin
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.Typography

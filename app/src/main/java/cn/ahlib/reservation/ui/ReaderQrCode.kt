@@ -14,8 +14,8 @@ import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.QrCode2
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
@@ -117,7 +117,7 @@ internal fun ReaderQrCodeImage(
             when (imageState) {
                 AsyncImagePainter.State.Empty,
                 is AsyncImagePainter.State.Loading,
-                -> CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                -> LoadingIndicator(modifier = Modifier.size(24.dp))
 
                 is AsyncImagePainter.State.Error -> Icon(
                     imageVector = Icons.Outlined.BrokenImage,
@@ -242,9 +242,8 @@ internal fun ReaderQrBindingDialog(
                 enabled = pageUrl.isNotBlank() && !isSaving,
             ) {
                 if (isSaving) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
                     )
                 }
                 Text(

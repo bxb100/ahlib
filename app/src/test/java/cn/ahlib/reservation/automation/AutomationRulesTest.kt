@@ -113,6 +113,55 @@ class AutomationRulesTest {
     }
 
     @Test
+    fun automaticSignOutRunsAtTwentyOneFiftyToday() {
+        val nextCheckAt = calculateNextAutomaticSignOutAt(
+            nowMillis = timestamp("2026-08-01 20:00:00"),
+            timeZone = timeZone,
+        )
+
+        assertEquals(timestamp("2026-08-01 21:50:00"), nextCheckAt)
+    }
+
+    @Test
+    fun automaticSignOutMovesToTomorrowAfterTriggerTime() {
+        val nextCheckAt = calculateNextAutomaticSignOutAt(
+            nowMillis = timestamp("2026-08-01 21:50:00"),
+            timeZone = timeZone,
+        )
+
+        assertEquals(timestamp("2026-08-02 21:50:00"), nextCheckAt)
+    }
+
+    @Test
+    fun automaticSignOutSelectsOnlyMatchingSignedInReservation() {
+        val signedIn = AppointmentRecord(
+            id = "signed-in",
+            bookingId = "booking",
+            signState = 1,
+        )
+
+        assertEquals(
+            signedIn,
+            selectAutomaticSignOutReservation(
+                records = listOf(signedIn),
+                currentRoomReservation = signedIn,
+            ),
+        )
+        assertNull(
+            selectAutomaticSignOutReservation(
+                records = listOf(signedIn),
+                currentRoomReservation = signedIn.copy(id = "another"),
+            ),
+        )
+        assertNull(
+            selectAutomaticSignOutReservation(
+                records = listOf(signedIn),
+                currentRoomReservation = signedIn.copy(signState = 0),
+            ),
+        )
+    }
+
+    @Test
     fun matchingReservationNormalizesDateAndTime() {
         val target = AutoBookingTarget(
             roomId = "room",

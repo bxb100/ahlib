@@ -8,17 +8,24 @@ data class AutoBookingTarget(
     val endTime: String,
 )
 
+data class AutomaticSignOutQrCode(
+    val roomId: String,
+    val imageUri: String,
+)
+
 data class AutomationSettings(
     val autoBookingEnabled: Boolean = false,
     val cancellationEnabled: Boolean = false,
     val cancellationLeadMinutes: Int = DEFAULT_CANCELLATION_LEAD_MINUTES,
     val mockLocationEnabled: Boolean = false,
     val target: AutoBookingTarget? = null,
+    val automaticSignOutQrCode: AutomaticSignOutQrCode? = null,
 )
 
 enum class AutomationTask {
     AUTO_BOOK,
     CANCELLATION_CHECK,
+    AUTO_SIGN_OUT,
 }
 
 enum class AutomationLogLevel {

@@ -270,10 +270,7 @@ private fun StartupContent(
     modifier: Modifier = Modifier,
 ) {
     if (isLoading) {
-        LoadingContent(
-            modifier = modifier,
-            label = stringResource(R.string.restoring_session),
-        )
+        LoadingContent(modifier = modifier)
     } else {
         ErrorContent(
             message = errorText ?: stringResource(R.string.restore_failed),
@@ -324,11 +321,17 @@ private fun AuthenticatedContent(
                         automationManager::setCancellationEnabled,
                     onCancellationLeadMinutesChange =
                         automationManager::setCancellationLeadMinutes,
+                    onAutomaticSignOutQrImageSelected =
+                        automationManager::configureAutomaticSignOutQrImage,
+                    onClearAutomaticSignOutQrImage =
+                        automationManager::clearAutomaticSignOutQrImage,
                     onMockLocationEnabledChange =
                         automationManager::setMockLocationEnabled,
                     onOpenLogs = { profilePage = ProfilePage.LOGS },
                     canScheduleExactAlarms =
                         automationManager::canScheduleExactAlarms,
+                    canShowCancellationNotifications =
+                        automationManager::canShowCancellationNotifications,
                     onSystemAccessChanged = automationManager::sync,
                     modifier = modifier,
                 )

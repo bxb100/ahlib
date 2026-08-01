@@ -17,3 +17,6 @@ internal fun AppointmentRecord.isCancellationEligible(): Boolean =
 
 internal fun AppointmentRecord.isPendingCheckIn(): Boolean =
     signState == SIGN_STATE_PENDING && statusMerge == 1
+
+internal fun AppointmentRecord.isSignedIn(): Boolean =
+    signState == SIGN_STATE_SIGNED_IN

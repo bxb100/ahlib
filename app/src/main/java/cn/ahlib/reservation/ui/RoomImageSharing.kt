@@ -13,7 +13,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.size
-import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -102,7 +102,7 @@ internal fun ShareableRoomImageBox(
     ) {
         content()
         if (isPreparingShare) {
-            CircularProgressIndicator(modifier = Modifier.size(36.dp))
+            LoadingIndicator(modifier = Modifier.size(36.dp))
         }
     }
 }

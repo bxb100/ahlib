@@ -35,6 +35,12 @@ class AutomationScheduler(
             cancelCancellationCheck()
             workManager.cancelUniqueWork(UNIQUE_CANCELLATION_WORK)
         }
+        if (settings.automaticSignOutQrCode != null) {
+            scheduleNextAutomaticSignOut()
+        } else {
+            cancelAlarm(AutomationTask.AUTO_SIGN_OUT)
+            workManager.cancelUniqueWork(UNIQUE_AUTO_SIGN_OUT_WORK)
+        }
     }
 
     fun scheduleNextAutoBooking(nowMillis: Long = System.currentTimeMillis()) {
@@ -100,6 +106,19 @@ class AutomationScheduler(
         cancelAlarm(AutomationTask.CANCELLATION_CHECK)
     }
 
+    fun scheduleNextAutomaticSignOut(
+        nowMillis: Long = System.currentTimeMillis(),
+    ) {
+        if (preferences.settings.value.automaticSignOutQrCode == null) {
+            cancelAlarm(AutomationTask.AUTO_SIGN_OUT)
+            return
+        }
+        scheduleAlarm(
+            AutomationTask.AUTO_SIGN_OUT,
+            calculateNextAutomaticSignOutAt(nowMillis),
+        )
+    }
+
     fun enqueue(task: AutomationTask) {
         val input = Data.Builder()
             .putString(AutomationWorker.KEY_TASK, task.name)
@@ -119,11 +138,7 @@ class AutomationScheduler(
         val request = requestBuilder.build()
         workManager.enqueueUniqueWork(
             task.uniqueWorkName,
-            if (task == AutomationTask.AUTO_BOOK) {
-                ExistingWorkPolicy.KEEP
-            } else {
-                ExistingWorkPolicy.REPLACE
-            },
+            ExistingWorkPolicy.KEEP,
             request,
         )
     }
@@ -200,6 +215,7 @@ class AutomationScheduler(
         const val MINIMUM_ALARM_DELAY_MILLIS = 1_000L
         const val UNIQUE_AUTO_BOOKING_WORK = "automatic_booking"
         const val UNIQUE_CANCELLATION_WORK = "automatic_cancellation"
+        const val UNIQUE_AUTO_SIGN_OUT_WORK = "automatic_sign_out"
         private const val LEGACY_RESERVATION_REMINDER_TASK =
             "RESERVATION_REMINDER"
         private const val LEGACY_RESERVATION_REMINDER_WORK =
@@ -212,6 +228,7 @@ private val AutomationTask.requestCode: Int
     get() = when (this) {
         AutomationTask.AUTO_BOOK -> 7100
         AutomationTask.CANCELLATION_CHECK -> 7101
+        AutomationTask.AUTO_SIGN_OUT -> 7103
     }
 
 private val AutomationTask.uniqueWorkName: String
@@ -219,4 +236,6 @@ private val AutomationTask.uniqueWorkName: String
         AutomationTask.AUTO_BOOK -> AutomationScheduler.UNIQUE_AUTO_BOOKING_WORK
         AutomationTask.CANCELLATION_CHECK ->
             AutomationScheduler.UNIQUE_CANCELLATION_WORK
+        AutomationTask.AUTO_SIGN_OUT ->
+            AutomationScheduler.UNIQUE_AUTO_SIGN_OUT_WORK
     }

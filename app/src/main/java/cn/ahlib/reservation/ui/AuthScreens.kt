@@ -39,12 +39,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -289,10 +289,9 @@ fun LoginScreen(
                             enabled = canLogin,
                         ) {
                             if (isSubmitting) {
-                                CircularProgressIndicator(
+                                LoadingIndicator(
                                     modifier = Modifier.size(20.dp),
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                                    strokeWidth = 2.dp,
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(stringResource(R.string.logging_in))
@@ -453,10 +452,9 @@ fun PhoneBindingScreen(
                             enabled = canSendCode,
                         ) {
                             if (isSendingCode) {
-                                CircularProgressIndicator(
+                                LoadingIndicator(
                                     modifier = Modifier.size(20.dp),
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                                    strokeWidth = 2.dp,
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(stringResource(R.string.sending_sms_code))
@@ -510,10 +508,9 @@ fun PhoneBindingScreen(
                             enabled = canSubmit,
                         ) {
                             if (isSubmitting) {
-                                CircularProgressIndicator(
+                                LoadingIndicator(
                                     modifier = Modifier.size(20.dp),
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                                    strokeWidth = 2.dp,
                                 )
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text(stringResource(R.string.binding_phone))
@@ -717,9 +714,8 @@ private fun CaptchaPreview(
                         ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    CircularProgressIndicator(
+                    LoadingIndicator(
                         modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp,
                     )
                 }
             }
@@ -731,10 +727,9 @@ private fun CaptchaPreview(
             enabled = enabled && !isCaptchaLoading,
         ) {
             if (isCaptchaLoading) {
-                CircularProgressIndicator(
+                LoadingIndicator(
                     modifier = Modifier.size(20.dp),
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
-                    strokeWidth = 2.dp,
                 )
             } else {
                 Icon(

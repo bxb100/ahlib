@@ -28,8 +28,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.BrokenImage
 import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -198,7 +198,7 @@ private fun RoomContentImage(
         when (state) {
             AsyncImagePainter.State.Empty,
             is AsyncImagePainter.State.Loading,
-            -> CircularProgressIndicator(modifier = Modifier.padding(24.dp))
+            -> LoadingIndicator(modifier = Modifier.padding(24.dp))
 
             is AsyncImagePainter.State.Error -> {
                 Column(

@@ -15,8 +15,8 @@ import androidx.compose.material.icons.outlined.CloudOff
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Inbox
 import androidx.compose.material3.Button
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
@@ -37,14 +37,13 @@ import cn.ahlib.reservation.ui.theme.spacing
 @Composable
 internal fun LoadingContent(
     modifier: Modifier = Modifier,
-    label: String = stringResource(R.string.loading),
 ) {
-    StatePanel(
-        modifier = modifier,
-        icon = null,
-        message = label,
-        progress = true,
-    )
+    Box(
+        modifier = modifier.padding(MaterialTheme.spacing.extraLarge),
+        contentAlignment = Alignment.Center,
+    ) {
+        LoadingIndicator()
+    }
 }
 
 @Composable
@@ -89,7 +88,6 @@ private fun StatePanel(
     message: String,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    progress: Boolean = false,
     iconContainerColor: Color = MaterialTheme.colorScheme.primaryContainer,
     iconColor: Color = MaterialTheme.colorScheme.onPrimaryContainer,
     actionLabel: String? = null,
@@ -115,22 +113,19 @@ private fun StatePanel(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center,
             ) {
-                when {
-                    progress -> CircularProgressIndicator()
-                    icon != null -> {
-                        Surface(
-                            modifier = Modifier.size(64.dp),
-                            shape = MaterialTheme.shapes.extraLarge,
-                            color = iconContainerColor,
-                            contentColor = iconColor,
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    imageVector = icon,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(30.dp),
-                                )
-                            }
+                if (icon != null) {
+                    Surface(
+                        modifier = Modifier.size(64.dp),
+                        shape = MaterialTheme.shapes.extraLarge,
+                        color = iconContainerColor,
+                        contentColor = iconColor,
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Icon(
+                                imageVector = icon,
+                                contentDescription = null,
+                                modifier = Modifier.size(30.dp),
+                            )
                         }
                     }
                 }
@@ -250,17 +245,20 @@ internal fun LabeledValue(
     Row(
         modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
-        verticalAlignment = Alignment.Top,
     ) {
         Text(
             text = label,
-            modifier = Modifier.weight(0.34f),
+            modifier = Modifier
+                .weight(0.34f)
+                .alignByBaseline(),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.labelLarge,
         )
         Text(
             text = value,
-            modifier = Modifier.weight(0.66f),
+            modifier = Modifier
+                .weight(0.66f)
+                .alignByBaseline(),
             style = MaterialTheme.typography.bodyLarge,
         )
     }

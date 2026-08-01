@@ -37,7 +37,11 @@ class LibraryWebViewScreenTest {
         composeRule.onNodeWithText(title).assertIsDisplayed()
         composeRule.onNodeWithText(host).assertIsDisplayed()
         composeRule.onNodeWithTag(LIBRARY_WEB_VIEW_TEST_TAG).assertExists()
+        composeRule.onNodeWithTag(LIBRARY_WEB_VIEW_MENU_TEST_TAG)
+            .assertHasClickAction()
+            .performClick()
         composeRule.onNodeWithTag(LIBRARY_WEB_VIEW_REFRESH_TEST_TAG)
+            .assertIsDisplayed()
             .assertHasClickAction()
     }
 

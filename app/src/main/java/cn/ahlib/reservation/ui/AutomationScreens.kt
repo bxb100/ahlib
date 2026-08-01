@@ -1,12 +1,19 @@
 package cn.ahlib.reservation.ui
 
+import android.Manifest
 import android.annotation.SuppressLint
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.os.PowerManager
 import android.provider.Settings
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -16,6 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.text.KeyboardOptions
@@ -36,6 +44,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
@@ -49,6 +58,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -62,7 +72,6 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.core.net.toUri
 import cn.ahlib.reservation.R
 import cn.ahlib.reservation.automation.AUTOMATION_LOG_MAX_ENTRIES
 import cn.ahlib.reservation.automation.AutomationLogEntry
@@ -70,9 +79,13 @@ import cn.ahlib.reservation.automation.AutomationLogLevel
 import cn.ahlib.reservation.automation.AutomationSettings
 import cn.ahlib.reservation.automation.MAX_CANCELLATION_LEAD_MINUTES
 import cn.ahlib.reservation.automation.MIN_CANCELLATION_LEAD_MINUTES
+import cn.ahlib.reservation.scanner.QrImageScanError
+import cn.ahlib.reservation.scanner.QrImageScanResult
+import cn.ahlib.reservation.scanner.messageResource
 import cn.ahlib.reservation.ui.theme.spacing
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -82,20 +95,62 @@ fun AutomationSettingsScreen(
     onAutoBookingEnabledChange: (Boolean) -> Unit,
     onCancellationEnabledChange: (Boolean) -> Unit,
     onCancellationLeadMinutesChange: (Int) -> Unit,
+    onAutomaticSignOutQrImageSelected: suspend (
+        android.net.Uri,
+    ) -> QrImageScanResult,
+    onClearAutomaticSignOutQrImage: () -> Unit,
     onMockLocationEnabledChange: (Boolean) -> Unit,
     onOpenLogs: () -> Unit,
     canScheduleExactAlarms: () -> Boolean,
+    canShowCancellationNotifications: () -> Boolean,
     onSystemAccessChanged: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     BackHandler(onBack = onBack)
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
+    val coroutineScope = rememberCoroutineScope()
     var backgroundAccessGranted by remember {
         mutableStateOf(context.isIgnoringBatteryOptimizations())
     }
     var exactAlarmAccessGranted by remember {
         mutableStateOf(canScheduleExactAlarms())
+    }
+    var notificationAccessGranted by remember {
+        mutableStateOf(canShowCancellationNotifications())
+    }
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission(),
+    ) { granted ->
+        notificationAccessGranted = granted && canShowCancellationNotifications()
+        if (granted) {
+            onCancellationEnabledChange(true)
+        }
+    }
+    var isImportingSignOutQrImage by remember { mutableStateOf(false) }
+    var signOutQrImageError by remember {
+        mutableStateOf<QrImageScanError?>(null)
+    }
+    val signOutQrImagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickVisualMedia(),
+    ) { uri ->
+        if (uri == null) {
+            return@rememberLauncherForActivityResult
+        }
+        coroutineScope.launch {
+            isImportingSignOutQrImage = true
+            signOutQrImageError = null
+            try {
+                when (val result = onAutomaticSignOutQrImageSelected(uri)) {
+                    is QrImageScanResult.Success -> Unit
+                    is QrImageScanResult.Failure -> {
+                        signOutQrImageError = result.error
+                    }
+                }
+            } finally {
+                isImportingSignOutQrImage = false
+            }
+        }
     }
     var leadInput by rememberSaveable {
         mutableStateOf(settings.cancellationLeadMinutes.toString())
@@ -113,6 +168,7 @@ fun AutomationSettingsScreen(
                 onSystemAccessChanged()
                 backgroundAccessGranted = context.isIgnoringBatteryOptimizations()
                 exactAlarmAccessGranted = canScheduleExactAlarms()
+                notificationAccessGranted = canShowCancellationNotifications()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -194,7 +250,21 @@ fun AutomationSettingsScreen(
                             R.string.auto_cancellation_description,
                         ),
                         checked = settings.cancellationEnabled,
-                        onCheckedChange = onCancellationEnabledChange,
+                        onCheckedChange = { enabled ->
+                            when {
+                                !enabled -> onCancellationEnabledChange(false)
+                                context.hasNotificationPermission() &&
+                                    canShowCancellationNotifications() ->
+                                    onCancellationEnabledChange(true)
+
+                                context.hasNotificationPermission() ->
+                                    context.openNotificationSettings()
+
+                                else -> notificationPermissionLauncher.launch(
+                                    Manifest.permission.POST_NOTIFICATIONS,
+                                )
+                            }
+                        },
                     )
                     HorizontalDivider()
                     OutlinedTextField(
@@ -244,6 +314,77 @@ fun AutomationSettingsScreen(
                 }
             }
 
+            item(key = "automatic-sign-out") {
+                SettingsCard {
+                    Text(
+                        text = stringResource(R.string.automatic_sign_out_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        text = stringResource(
+                            R.string.automatic_sign_out_description,
+                        ),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    settings.automaticSignOutQrCode?.let { qrCode ->
+                        Text(
+                            text = stringResource(
+                                R.string.automatic_sign_out_qr_configured,
+                                qrCode.roomId,
+                            ),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    signOutQrImageError?.let { error ->
+                        Text(
+                            text = stringResource(error.messageResource()),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                    FilledTonalButton(
+                        onClick = {
+                            signOutQrImagePicker.launch(
+                                PickVisualMediaRequest(
+                                    ActivityResultContracts.PickVisualMedia.ImageOnly,
+                                ),
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !isImportingSignOutQrImage,
+                    ) {
+                        if (isImportingSignOutQrImage) {
+                            LoadingIndicator(modifier = Modifier.size(24.dp))
+                        } else {
+                            Text(
+                                stringResource(
+                                    if (settings.automaticSignOutQrCode == null) {
+                                        R.string.automatic_sign_out_select_qr
+                                    } else {
+                                        R.string.automatic_sign_out_replace_qr
+                                    },
+                                ),
+                            )
+                        }
+                    }
+                    if (settings.automaticSignOutQrCode != null) {
+                        TextButton(
+                            onClick = {
+                                signOutQrImageError = null
+                                onClearAutomaticSignOutQrImage()
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = !isImportingSignOutQrImage,
+                        ) {
+                            Text(stringResource(R.string.automatic_sign_out_clear_qr))
+                        }
+                    }
+                }
+            }
+
             item(key = "background-access") {
                 SettingsCard {
                     Text(
@@ -278,6 +419,18 @@ fun AutomationSettingsScreen(
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(stringResource(R.string.allow_exact_alarm))
+                        }
+                    }
+                    BackgroundStatusRow(
+                        label = stringResource(R.string.notification_access),
+                        granted = notificationAccessGranted,
+                    )
+                    if (!notificationAccessGranted) {
+                        FilledTonalButton(
+                            onClick = context::openNotificationSettings,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.allow_notifications))
                         }
                     }
                     Text(
@@ -555,6 +708,29 @@ private fun Context.requestExactAlarmAccess() {
         Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
         packageUri,
     ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    try {
+        startActivity(request)
+    } catch (_: ActivityNotFoundException) {
+        runCatching {
+            startActivity(
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, packageUri)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            )
+        }
+    }
+}
+
+private fun Context.hasNotificationPermission(): Boolean =
+    ContextCompat.checkSelfPermission(
+        this,
+        Manifest.permission.POST_NOTIFICATIONS,
+    ) == PackageManager.PERMISSION_GRANTED
+
+private fun Context.openNotificationSettings() {
+    val packageUri = "package:$packageName".toUri()
+    val request = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
     try {
         startActivity(request)
     } catch (_: ActivityNotFoundException) {
