@@ -4,6 +4,8 @@ import android.annotation.SuppressLint
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.webkit.CookieManager
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -228,9 +230,11 @@ private class WebViewHolder(
             allowContentAccess = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             safeBrowsingEnabled = true
-            cacheMode = WebSettings.LOAD_DEFAULT
+            cacheMode = WebSettings.LOAD_NO_CACHE
         }
-        webView.webViewClient = LibraryWebViewClient()
+        webView.webViewClient = LibraryWebViewClient(
+            resourceCache = LibraryWebResourceCache.get(context),
+        )
         loadWithSessionCookies(webView, pageUrl, sessionCookies)
     }
 
@@ -239,7 +243,9 @@ private class WebViewHolder(
     }
 }
 
-private class LibraryWebViewClient : WebViewClient() {
+private class LibraryWebViewClient(
+    private val resourceCache: LibraryWebResourceCache,
+) : WebViewClient() {
     override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
         if (url == null || !Uri.parse(url).isTrustedLibraryUrl()) {
@@ -250,8 +256,18 @@ private class LibraryWebViewClient : WebViewClient() {
 
     override fun shouldOverrideUrlLoading(
         view: WebView,
-        request: android.webkit.WebResourceRequest,
+        request: WebResourceRequest,
     ): Boolean = !request.url.isTrustedLibraryUrl()
+
+    override fun shouldInterceptRequest(
+        view: WebView,
+        request: WebResourceRequest,
+    ): WebResourceResponse? {
+        if (request.isForMainFrame || request.method != "GET") {
+            return null
+        }
+        return resourceCache.intercept(request)
+    }
 }
 
 private fun Uri.isTrustedLibraryUrl(): Boolean =

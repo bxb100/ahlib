@@ -1,9 +1,10 @@
 [tools]
-android-sdk = "22.0"
-java = "temurin-25.0.2+10.0.LTS"
-jq = "1.8.2"
-rust = "latest"
 "cargo:cargo-ndk" = "4.1.2"
+
+[env]
+_.file = ".env"
+ANDROID_HOME = "{{ env.ANDROID_HOME | default(value='/opt/homebrew/share/android-commandlinetools') }}"
+ANDROID_SDK_ROOT = "{{ env.ANDROID_HOME | default(value='/opt/homebrew/share/android-commandlinetools') }}"
 
 [tasks.setup]
 description = "Install Android SDK components and the Rust Android target"
