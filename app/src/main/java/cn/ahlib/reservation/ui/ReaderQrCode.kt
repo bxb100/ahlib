@@ -17,28 +17,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material.icons.outlined.QrCode2
-import androidx.compose.material.icons.outlined.Refresh
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -53,8 +43,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
@@ -67,7 +55,35 @@ import kotlin.math.ceil
 import kotlin.math.floor
 
 @Composable
-internal fun ReaderQrCodeUnbound(
+internal fun ReaderQrCodePlaceholder(
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        modifier = modifier.size(112.dp),
+        shape = MaterialTheme.shapes.small,
+        color = MaterialTheme.colorScheme.surfaceContainerHighest,
+        contentColor = MaterialTheme.colorScheme.primary,
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant,
+        ),
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+        ) {
+            LoadingIndicator(modifier = Modifier.size(32.dp))
+            Text(
+                text = stringResource(R.string.reader_qr_loading),
+                modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ReaderQrCodeNotSet(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -92,7 +108,7 @@ internal fun ReaderQrCodeUnbound(
                 modifier = Modifier.size(32.dp),
             )
             Text(
-                text = stringResource(R.string.reader_qr_unbound),
+                text = stringResource(R.string.reader_qr_not_set),
                 modifier = Modifier.padding(top = MaterialTheme.spacing.extraSmall),
                 style = MaterialTheme.typography.labelLarge,
             )
@@ -132,11 +148,7 @@ internal fun ReaderQrCode(
 @Composable
 internal fun ReaderQrCodeViewer(
     content: String,
-    isRefreshing: Boolean,
-    isStale: Boolean,
     onDismiss: () -> Unit,
-    onRefresh: () -> Unit,
-    onClearBinding: () -> Unit,
 ) {
     val matrix = remember(content) { encodeReaderQrCode(content) }
 
@@ -165,31 +177,6 @@ internal fun ReaderQrCodeViewer(
                                 )
                             }
                         },
-                        actions = {
-                            IconButton(
-                                onClick = onRefresh,
-                                enabled = !isRefreshing,
-                            ) {
-                                if (isRefreshing) {
-                                    LoadingIndicator(modifier = Modifier.size(20.dp))
-                                } else {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Refresh,
-                                        contentDescription = stringResource(
-                                            R.string.reader_qr_refresh,
-                                        ),
-                                    )
-                                }
-                            }
-                            TextButton(
-                                onClick = onClearBinding,
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.error,
-                                ),
-                            ) {
-                                Text(stringResource(R.string.reader_qr_clear_binding))
-                            }
-                        },
                     )
                 },
             ) { contentPadding ->
@@ -208,44 +195,6 @@ internal fun ReaderQrCodeViewer(
                             .weight(1f)
                             .fillMaxWidth(),
                     )
-                    Text(
-                        text = content,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = MaterialTheme.spacing.screen),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.labelSmall,
-                        textAlign = TextAlign.Center,
-                    )
-                    Text(
-                        text = stringResource(R.string.reader_qr_expiry_notice),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                top = MaterialTheme.spacing.extraSmall,
-                                start = MaterialTheme.spacing.screen,
-                                end = MaterialTheme.spacing.screen,
-                                bottom = MaterialTheme.spacing.medium,
-                            ),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        style = MaterialTheme.typography.labelSmall,
-                        textAlign = TextAlign.Center,
-                    )
-                    if (isStale) {
-                        Text(
-                            text = stringResource(R.string.reader_qr_stale_warning),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(
-                                    horizontal = MaterialTheme.spacing.screen,
-                                    vertical = MaterialTheme.spacing.extraSmall,
-                                ),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.labelSmall,
-                            textAlign = TextAlign.Center,
-                        )
-                    }
                 }
             }
         }
@@ -378,164 +327,3 @@ private fun DrawScope.drawReaderQrCode(matrix: BitMatrix) {
 
 private const val MIN_QR_SCALE = 1f
 private const val MAX_QR_SCALE = 5f
-
-@Composable
-internal fun ReaderQrBindingDialog(
-    pageUrl: String,
-    isSaving: Boolean,
-    isFetching: Boolean,
-    errorText: String?,
-    onPageUrlChange: (String) -> Unit,
-    onSave: () -> Unit,
-    onFetch: () -> Unit,
-    onDismiss: () -> Unit,
-) {
-    val isBusy = isSaving || isFetching
-    var selectedAuthorizationTab by rememberSaveable {
-        mutableIntStateOf(AUTHORIZATION_TAB_LOGIN)
-    }
-
-    AlertDialog(
-        onDismissRequest = {
-            if (!isBusy) {
-                onDismiss()
-            }
-        },
-        title = { Text(stringResource(R.string.reader_qr_bind)) },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.medium),
-            ) {
-                SecondaryTabRow(
-                    selectedTabIndex = selectedAuthorizationTab,
-                    containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                ) {
-                    Tab(
-                        selected = selectedAuthorizationTab == AUTHORIZATION_TAB_LOGIN,
-                        onClick = {
-                            selectedAuthorizationTab = AUTHORIZATION_TAB_LOGIN
-                        },
-                        enabled = !isBusy,
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        text = {
-                            Text(stringResource(R.string.reader_qr_authorization_login))
-                        },
-                    )
-                    Tab(
-                        selected = selectedAuthorizationTab == AUTHORIZATION_TAB_MANUAL,
-                        onClick = {
-                            selectedAuthorizationTab = AUTHORIZATION_TAB_MANUAL
-                        },
-                        enabled = !isBusy,
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        text = {
-                            Text(stringResource(R.string.reader_qr_authorization_manual))
-                        },
-                    )
-                }
-                if (selectedAuthorizationTab == AUTHORIZATION_TAB_LOGIN) {
-                    Text(
-                        text = stringResource(R.string.reader_qr_auto_fetch_description),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    FilledTonalButton(
-                        onClick = onFetch,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isBusy,
-                    ) {
-                        if (isFetching) {
-                            LoadingIndicator(modifier = Modifier.size(18.dp))
-                        } else {
-                            Icon(
-                                imageVector = Icons.Outlined.QrCode2,
-                                contentDescription = null,
-                            )
-                        }
-                        Text(
-                            text = stringResource(
-                                if (isFetching) {
-                                    R.string.reader_qr_auto_fetching
-                                } else {
-                                    R.string.reader_qr_auto_fetch
-                                },
-                            ),
-                            modifier = Modifier.padding(start = MaterialTheme.spacing.small),
-                        )
-                    }
-                } else {
-                    Text(
-                        text = stringResource(R.string.reader_qr_link_instructions),
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    OutlinedTextField(
-                        value = pageUrl,
-                        onValueChange = onPageUrlChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isBusy,
-                        label = { Text(stringResource(R.string.reader_qr_page_url)) },
-                        placeholder = {
-                            Text(stringResource(R.string.reader_qr_page_url_hint))
-                        },
-                        isError = errorText != null,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
-                            keyboardType = KeyboardType.Uri,
-                        ),
-                        minLines = 3,
-                        maxLines = 5,
-                    )
-                }
-                if (errorText != null) {
-                    Text(
-                        text = errorText,
-                        color = MaterialTheme.colorScheme.error,
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                }
-            }
-        },
-        confirmButton = {
-            if (selectedAuthorizationTab == AUTHORIZATION_TAB_MANUAL) {
-                TextButton(
-                    onClick = onSave,
-                    enabled = pageUrl.isNotBlank() && !isBusy,
-                ) {
-                    if (isSaving) {
-                        LoadingIndicator(
-                            modifier = Modifier.size(18.dp),
-                        )
-                    }
-                    Text(
-                        text = stringResource(
-                            if (isSaving) {
-                                R.string.reader_qr_saving
-                            } else {
-                                R.string.reader_qr_save
-                            },
-                        ),
-                        modifier = if (isSaving) {
-                            Modifier.padding(start = MaterialTheme.spacing.small)
-                        } else {
-                            Modifier
-                        },
-                    )
-                }
-            }
-        },
-        dismissButton = {
-            TextButton(
-                onClick = onDismiss,
-                enabled = !isBusy,
-            ) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
-}
-
-private const val AUTHORIZATION_TAB_LOGIN = 0
-private const val AUTHORIZATION_TAB_MANUAL = 1

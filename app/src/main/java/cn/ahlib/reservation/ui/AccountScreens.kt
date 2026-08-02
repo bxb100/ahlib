@@ -1016,18 +1016,11 @@ fun ProfileScreen(
     profile: UserInfo?,
     readerId: String,
     readerQrContent: String?,
-    readerQrPageUrl: String,
     appVersionName: String,
-    isSavingReaderQr: Boolean,
-    isRefreshingReaderQr: Boolean,
-    isReaderQrStale: Boolean,
+    isLoadingReaderQr: Boolean,
     isCheckingUpdate: Boolean,
-    readerQrErrorText: String?,
     isLoggingOut: Boolean,
-    onReaderQrPageUrlChange: (String) -> Unit,
-    onSaveReaderQrPageUrl: () -> Unit,
-    onRefreshReaderQrCode: () -> Unit,
-    onClearReaderQrBinding: () -> Unit,
+    onRetryReaderQrCode: () -> Unit,
     onOpenReaderQrCode: () -> Unit,
     onOpenAutomation: () -> Unit,
     onCheckUpdate: () -> Unit,
@@ -1035,8 +1028,6 @@ fun ProfileScreen(
     modifier: Modifier = Modifier,
 ) {
     var showLogoutDialog by rememberSaveable { mutableStateOf(false) }
-    var showReaderQrEditor by rememberSaveable { mutableStateOf(false) }
-    var wasBindingReaderQr by remember { mutableStateOf(false) }
     val missingValue = stringResource(R.string.not_provided)
     val readerStatusResource = readerStatusLabelResource(profile?.readerStatus)
     val readerStatusValue = if (readerStatusResource != null) {
@@ -1051,24 +1042,6 @@ fun ProfileScreen(
     val readerIdValue = normalizedReaderId
         .takeIf(String::isNotEmpty)
         ?: missingValue
-
-    LaunchedEffect(
-        isSavingReaderQr,
-        isRefreshingReaderQr,
-        readerQrContent,
-        readerQrErrorText,
-    ) {
-        val isBindingReaderQr = isSavingReaderQr || isRefreshingReaderQr
-        if (
-            wasBindingReaderQr &&
-            !isBindingReaderQr &&
-            readerQrContent != null &&
-            readerQrErrorText == null
-        ) {
-            showReaderQrEditor = false
-        }
-        wasBindingReaderQr = isBindingReaderQr
-    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1118,18 +1091,18 @@ fun ProfileScreen(
                                 value = readerStatusValue,
                             )
                         }
-                        if (readerQrContent == null) {
-                            ReaderQrCodeUnbound(
-                                onClick = { showReaderQrEditor = true },
-                            )
-                        } else {
+                        if (readerQrContent != null) {
                             ReaderQrCode(
                                 content = readerQrContent,
                                 onClick = onOpenReaderQrCode,
                             )
+                        } else if (isLoadingReaderQr) {
+                            ReaderQrCodePlaceholder()
+                        } else {
+                            ReaderQrCodeNotSet(onClick = onRetryReaderQrCode)
                         }
                     }
-                    if (isRefreshingReaderQr) {
+                    if (isLoadingReaderQr) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(
                                 MaterialTheme.spacing.small,
@@ -1138,36 +1111,10 @@ fun ProfileScreen(
                         ) {
                             LoadingIndicator(modifier = Modifier.size(18.dp))
                             Text(
-                                text = stringResource(R.string.reader_qr_refreshing),
+                                text = stringResource(R.string.reader_qr_loading),
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 style = MaterialTheme.typography.bodySmall,
                             )
-                        }
-                    }
-                    if (isReaderQrStale) {
-                        Text(
-                            text = stringResource(R.string.reader_qr_stale_warning),
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (readerQrErrorText != null && !isRefreshingReaderQr) {
-                        Text(
-                            text = readerQrErrorText,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        Row(
-                            horizontalArrangement = Arrangement.spacedBy(
-                                MaterialTheme.spacing.small,
-                            ),
-                        ) {
-                            TextButton(onClick = onRefreshReaderQrCode) {
-                                Text(stringResource(R.string.retry))
-                            }
-                            TextButton(onClick = { showReaderQrEditor = true }) {
-                                Text(stringResource(R.string.reader_qr_manual_binding))
-                            }
                         }
                     }
                 }
@@ -1248,19 +1195,6 @@ fun ProfileScreen(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-    }
-
-    if (showReaderQrEditor) {
-        ReaderQrBindingDialog(
-            pageUrl = readerQrPageUrl,
-            isSaving = isSavingReaderQr,
-            isFetching = isRefreshingReaderQr,
-            errorText = readerQrErrorText,
-            onPageUrlChange = onReaderQrPageUrlChange,
-            onSave = onSaveReaderQrPageUrl,
-            onFetch = onRefreshReaderQrCode,
-            onDismiss = { showReaderQrEditor = false },
-        )
     }
 
     if (showLogoutDialog) {

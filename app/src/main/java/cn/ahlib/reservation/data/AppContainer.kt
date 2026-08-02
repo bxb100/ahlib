@@ -21,10 +21,10 @@ class AppContainer(
         val appContext = context.applicationContext
         backgroundScope.launch(Dispatchers.IO) {
             clearDeprecatedReaderAccountHistory(appContext)
+            clearDeprecatedReaderQrCache(appContext)
         }
         val gson = GsonFactory.create()
         readerQrCodeRepository = ReaderQrCodeRepository(
-            context = appContext,
             nativeClient = JniReaderQrNativeClient(appContext, gson),
         )
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
@@ -54,6 +54,10 @@ class AppContainer(
         context.deleteSharedPreferences(DEPRECATED_READER_ACCOUNTS_PREFERENCES)
     }
 
+    private fun clearDeprecatedReaderQrCache(context: Context) {
+        context.deleteSharedPreferences(DEPRECATED_READER_QR_PREFERENCES)
+    }
+
     private fun String.withTrailingSlash(): String =
         if (endsWith('/')) this else "$this/"
 
@@ -62,5 +66,6 @@ class AppContainer(
         const val READ_TIMEOUT_SECONDS = 30L
         const val WRITE_TIMEOUT_SECONDS = 30L
         const val DEPRECATED_READER_ACCOUNTS_PREFERENCES = "reader_accounts"
+        const val DEPRECATED_READER_QR_PREFERENCES = "reader_qr_code"
     }
 }

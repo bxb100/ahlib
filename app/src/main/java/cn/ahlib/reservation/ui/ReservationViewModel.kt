@@ -244,11 +244,7 @@ data class ScannerUiState(
 
 data class ReaderQrCodeUiState(
     val content: String? = null,
-    val pageUrlInput: String = "",
-    val isSaving: Boolean = false,
-    val isRefreshing: Boolean = false,
-    val isStale: Boolean = false,
-    val error: UiText? = null,
+    val isLoading: Boolean = false,
 )
 
 data class ReservationUiState(
@@ -483,98 +479,15 @@ class ReservationViewModel(
         }
     }
 
-    fun updateReaderQrPageUrl(value: String) {
-        _uiState.update { state ->
-            state.copy(
-                readerQrCode = state.readerQrCode.copy(
-                    pageUrlInput = value,
-                    error = null,
-                ),
-            )
-        }
+    fun retryReaderQrCode() {
+        loadReaderQrCode()
     }
 
-    fun saveReaderQrPageUrl() {
+    private fun loadReaderQrCode() {
         val state = _uiState.value
         if (
             state.stage != AppStage.AUTHENTICATED ||
-            state.readerQrCode.isSaving ||
-            state.readerQrCode.isRefreshing
-        ) {
-            return
-        }
-        val readerId = state.login.readerId.trim()
-        val pageUrl = state.readerQrCode.pageUrlInput.trim()
-        if (readerId.isEmpty() || pageUrl.isEmpty()) {
-            _uiState.update { current ->
-                current.copy(
-                    readerQrCode = current.readerQrCode.copy(
-                        error = UiText.Resource(R.string.reader_qr_error_invalid_url),
-                    ),
-                )
-            }
-            return
-        }
-
-        readerQrCodeJob?.cancel()
-        val requestId = ++readerQrRequestId
-        _uiState.update { current ->
-            current.copy(
-                readerQrCode = current.readerQrCode.copy(
-                    isSaving = true,
-                    isRefreshing = false,
-                    error = null,
-                ),
-            )
-        }
-        readerQrCodeJob = viewModelScope.launch {
-            when (
-                val result = readerQrCodeRepository.resolveAndCache(
-                    readerId = readerId,
-                    pageUrl = pageUrl,
-                )
-            ) {
-                is ReaderQrCodeResult.Success -> {
-                    if (requestId != readerQrRequestId) {
-                        return@launch
-                    }
-                    _uiState.update { current ->
-                        current.copy(
-                            readerQrCode = ReaderQrCodeUiState(
-                                content = result.content,
-                            ),
-                            message = newMessage(R.string.reader_qr_saved),
-                        )
-                    }
-                }
-
-                is ReaderQrCodeResult.Failure -> {
-                    if (requestId != readerQrRequestId) {
-                        return@launch
-                    }
-                    _uiState.update { current ->
-                        current.copy(
-                            readerQrCode = current.readerQrCode.copy(
-                                isSaving = false,
-                                error = result.toUiText(),
-                            ),
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    fun refreshReaderQrCode() {
-        refreshReaderQrCode(showSuccessMessage = true)
-    }
-
-    private fun refreshReaderQrCode(showSuccessMessage: Boolean) {
-        val state = _uiState.value
-        if (
-            state.stage != AppStage.AUTHENTICATED ||
-            state.readerQrCode.isSaving ||
-            state.readerQrCode.isRefreshing
+            state.readerQrCode.isLoading
         ) {
             return
         }
@@ -588,8 +501,7 @@ class ReservationViewModel(
         _uiState.update { current ->
             current.copy(
                 readerQrCode = current.readerQrCode.copy(
-                    isRefreshing = true,
-                    error = null,
+                    isLoading = true,
                 ),
             )
         }
@@ -598,10 +510,7 @@ class ReservationViewModel(
             val result = if (cookieHeader == null) {
                 ReaderQrCodeResult.Failure(ReaderQrCodeFailure.SESSION_EXPIRED)
             } else {
-                readerQrCodeRepository.refreshAndCache(
-                    readerId = readerId,
-                    cookieHeader = cookieHeader,
-                )
+                readerQrCodeRepository.refresh(cookieHeader)
             }
             if (requestId != readerQrRequestId) {
                 return@launch
@@ -612,15 +521,8 @@ class ReservationViewModel(
                         current.copy(
                             readerQrCode = current.readerQrCode.copy(
                                 content = result.content,
-                                isRefreshing = false,
-                                isStale = false,
-                                error = null,
+                                isLoading = false,
                             ),
-                            message = if (showSuccessMessage) {
-                                newMessage(R.string.reader_qr_refreshed)
-                            } else {
-                                current.message
-                            },
                         )
                     }
                 }
@@ -629,34 +531,12 @@ class ReservationViewModel(
                     _uiState.update { current ->
                         current.copy(
                             readerQrCode = current.readerQrCode.copy(
-                                isRefreshing = false,
-                                isStale = current.readerQrCode.content != null,
-                                error = result.toUiText(),
+                                isLoading = false,
                             ),
                         )
                     }
                 }
             }
-        }
-    }
-
-    fun clearReaderQrCodeBinding() {
-        val state = _uiState.value
-        if (state.stage != AppStage.AUTHENTICATED) {
-            return
-        }
-        val readerId = state.login.readerId.trim()
-        if (readerId.isEmpty()) {
-            return
-        }
-        readerQrRequestId++
-        readerQrCodeJob?.cancel()
-        readerQrCodeRepository.clearCachedContent(readerId)
-        _uiState.update { current ->
-            current.copy(
-                readerQrCode = ReaderQrCodeUiState(),
-                message = newMessage(R.string.reader_qr_cleared),
-            )
         }
     }
 
@@ -1750,13 +1630,10 @@ class ReservationViewModel(
             profile = profile,
             selectedTab = AuthenticatedTab.ROOMS,
             login = LoginUiState(readerId = readerId),
-            readerQrCode = ReaderQrCodeUiState(
-                content = readerQrCodeRepository.cachedContent(readerId),
-            ),
             message = messageId?.let(::newMessage),
         )
         loadRooms(reset = true)
-        refreshReaderQrCode(showSuccessMessage = false)
+        loadReaderQrCode()
     }
 
     private fun enterLogin(@StringRes messageId: Int? = null) {
@@ -2428,32 +2305,6 @@ class ReservationViewModel(
             ?.takeIf(String::isNotBlank)
             ?.let { value -> UiText.Dynamic(value) }
             ?: UiText.Resource(R.string.error_unknown)
-    }
-
-    private fun ReaderQrCodeResult.Failure.toUiText(): UiText {
-        if (reason == ReaderQrCodeFailure.BUSINESS) {
-            message
-                ?.takeIf(String::isNotBlank)
-                ?.let { value -> return UiText.Dynamic(value) }
-        }
-        return UiText.Resource(
-            when (reason) {
-                ReaderQrCodeFailure.INVALID_PAGE_URL ->
-                    R.string.reader_qr_error_invalid_url
-                ReaderQrCodeFailure.SESSION_EXPIRED -> R.string.session_expired
-                ReaderQrCodeFailure.NETWORK -> R.string.reader_qr_error_network
-                ReaderQrCodeFailure.TLS -> R.string.reader_qr_error_tls
-                ReaderQrCodeFailure.HTTP -> R.string.reader_qr_error_http
-                ReaderQrCodeFailure.INVALID_RESPONSE -> R.string.reader_qr_error_response
-                ReaderQrCodeFailure.BUSINESS -> R.string.reader_qr_error_response
-                ReaderQrCodeFailure.NATIVE_UNAVAILABLE ->
-                    R.string.reader_qr_error_native_unavailable
-                ReaderQrCodeFailure.QR_IMAGE_NOT_FOUND ->
-                    R.string.reader_qr_error_not_found
-                ReaderQrCodeFailure.QR_CONTENT_INVALID ->
-                    R.string.reader_qr_error_parse
-            },
-        )
     }
 
     private fun appendDistinctRooms(

@@ -653,18 +653,11 @@ private fun AuthenticatedContent(
                 profile = state.profile,
                 readerId = state.login.readerId,
                 readerQrContent = state.readerQrCode.content,
-                readerQrPageUrl = state.readerQrCode.pageUrlInput,
                 appVersionName = BuildConfig.VERSION_NAME,
-                isSavingReaderQr = state.readerQrCode.isSaving,
-                isRefreshingReaderQr = state.readerQrCode.isRefreshing,
-                isReaderQrStale = state.readerQrCode.isStale,
+                isLoadingReaderQr = state.readerQrCode.isLoading,
                 isCheckingUpdate = isCheckingUpdate,
-                readerQrErrorText = state.readerQrCode.error?.resolve(),
                 isLoggingOut = state.isLoggingOut,
-                onReaderQrPageUrlChange = viewModel::updateReaderQrPageUrl,
-                onSaveReaderQrPageUrl = viewModel::saveReaderQrPageUrl,
-                onRefreshReaderQrCode = viewModel::refreshReaderQrCode,
-                onClearReaderQrBinding = viewModel::clearReaderQrCodeBinding,
+                onRetryReaderQrCode = viewModel::retryReaderQrCode,
                 onOpenReaderQrCode = { showReaderQrCodeViewer = true },
                 onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
                 onCheckUpdate = onCheckUpdate,
@@ -678,14 +671,7 @@ private fun AuthenticatedContent(
         state.readerQrCode.content?.let { content ->
             ReaderQrCodeViewer(
                 content = content,
-                isRefreshing = state.readerQrCode.isRefreshing,
-                isStale = state.readerQrCode.isStale,
                 onDismiss = { showReaderQrCodeViewer = false },
-                onRefresh = viewModel::refreshReaderQrCode,
-                onClearBinding = {
-                    showReaderQrCodeViewer = false
-                    viewModel.clearReaderQrCodeBinding()
-                },
             )
         }
     }
