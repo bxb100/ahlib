@@ -1,5 +1,5 @@
 [tools]
-"cargo:cargo-ndk" = "4.1.2"
+"cargo:cargo-ndk" = { path = "~/.cargo/bin/cargo-ndk" }
 
 [env]
 _.file = ".env"

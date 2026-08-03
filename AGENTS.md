@@ -29,7 +29,7 @@
 Android 默认验证命令为：
 
 ```shell
-env ANDROID_HOME=/opt/homebrew/share/android-commandlinetools ./gradlew testDebugUnitTest assembleDebug lintDebug
+./gradlew testDebugUnitTest assembleDebug lintDebug
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 adb shell monkey -p cn.ahlib.reservation.debug 1
 ```

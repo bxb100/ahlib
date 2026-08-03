@@ -1,6 +1,7 @@
 package cn.ahlib.reservation.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.webkit.CookieManager
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -184,6 +186,15 @@ private fun LibraryWebViewBrowserBar(
     }
 }
 
+@Preview(showSystemUi = true)
+@Composable
+private fun LibraryWebviewBrowserBar() {
+    LibraryWebViewBrowserBar(
+        onClose = {},
+        onRefresh = {},
+    )
+}
+
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
 private fun AuthenticatedLibraryWebView(
@@ -213,7 +224,7 @@ private class WebViewHolder(
     var value: WebView? = null
 
     @SuppressLint("SetJavaScriptEnabled")
-    fun create(context: android.content.Context): WebView = WebView(context).also { webView ->
+    fun create(context: Context): WebView = WebView(context).also { webView ->
         value = webView
         webView.setBackgroundColor(AndroidColor.WHITE)
         webView.settings.apply {
@@ -230,11 +241,9 @@ private class WebViewHolder(
             allowContentAccess = false
             mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
             safeBrowsingEnabled = true
-            cacheMode = WebSettings.LOAD_NO_CACHE
+            cacheMode = WebSettings.LOAD_DEFAULT
         }
-        webView.webViewClient = LibraryWebViewClient(
-            resourceCache = LibraryWebResourceCache.get(context),
-        )
+        webView.webViewClient = LibraryWebViewClient(context)
         loadWithSessionCookies(webView, pageUrl, sessionCookies)
     }
 
@@ -244,14 +253,22 @@ private class WebViewHolder(
 }
 
 private class LibraryWebViewClient(
-    private val resourceCache: LibraryWebResourceCache,
+    private val context: Context,
 ) : WebViewClient() {
+
+    val extScript: String by lazy {
+        context.resources.openRawResource(R.raw.webview_ext)
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
+    }
+
     override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
         if (url == null || !Uri.parse(url).isTrustedLibraryUrl()) {
             return
         }
-        view.evaluateJavascript(FOOTER_COMPOSITING_FIX_SCRIPT, null)
+
+        view.evaluateJavascript(extScript, null)
     }
 
     override fun shouldOverrideUrlLoading(
@@ -259,15 +276,7 @@ private class LibraryWebViewClient(
         request: WebResourceRequest,
     ): Boolean = !request.url.isTrustedLibraryUrl()
 
-    override fun shouldInterceptRequest(
-        view: WebView,
-        request: WebResourceRequest,
-    ): WebResourceResponse? {
-        if (request.isForMainFrame || request.method != "GET") {
-            return null
-        }
-        return resourceCache.intercept(request)
-    }
+
 }
 
 private fun Uri.isTrustedLibraryUrl(): Boolean =
@@ -275,44 +284,6 @@ private fun Uri.isTrustedLibraryUrl(): Boolean =
         host?.lowercase()?.let { hostName ->
             hostName == "lib.ah.cn" || hostName.endsWith(".lib.ah.cn")
         } == true
-
-// The persistent rule also covers footer nodes replaced by the source page's
-// client-side router without another main-frame navigation.
-internal const val FOOTER_COMPOSITING_FIX_SCRIPT = """
-    (() => {
-        const styleId = 'ahlib-footer-compositing-fix';
-        const installStyle = () => {
-            if (document.getElementById(styleId)) {
-                return;
-            }
-            const parent = document.head || document.documentElement;
-            if (!parent) {
-                return;
-            }
-            const style = document.createElement('style');
-            style.id = styleId;
-            style.textContent = `
-                .wap-footer {
-                    -webkit-transform: translateZ(0) !important;
-                    transform: translateZ(0) !important;
-                    -webkit-backface-visibility: hidden !important;
-                    backface-visibility: hidden !important;
-                }
-            `;
-            parent.appendChild(style);
-        };
-
-        installStyle();
-        if (!window.__ahlibFooterCompositingFixObserver) {
-            const observer = new MutationObserver(() => installStyle());
-            observer.observe(document.documentElement, {
-                childList: true,
-                subtree: true,
-            });
-            window.__ahlibFooterCompositingFixObserver = observer;
-        }
-    })()
-"""
 
 private fun loadWithSessionCookies(
     webView: WebView,

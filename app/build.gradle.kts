@@ -16,6 +16,15 @@ val readerQrNativeRoot = rootProject.layout.projectDirectory.dir("native/reader-
 val readerQrNativeManifest = readerQrNativeRoot.file("Cargo.toml")
 val readerQrNativeOutput = layout.buildDirectory.dir("generated/readerQrNative/jniLibs")
 val readerQrNativePrebuilt = layout.projectDirectory.dir("prebuilt/readerQrNative/jniLibs")
+val cargoExecutable = providers.gradleProperty("cargo.bin")
+    .orElse(
+        providers.systemProperty("user.home").map { userHome ->
+            file(userHome).resolve(".cargo/bin/cargo")
+                .takeIf { it.isFile }
+                ?.absolutePath
+                ?: "cargo"
+        },
+    )
 val forcePrebuiltReaderQrNative = providers.gradleProperty("usePrebuiltReaderQrNative")
     .map(String::toBoolean)
     .getOrElse(false)
@@ -36,7 +45,6 @@ fun String.asBuildConfigString(): String =
 android {
     namespace = "cn.ahlib.reservation"
     compileSdk = 37
-    buildToolsVersion = "37.0.0"
     ndkVersion = "29.0.14206865"
 
     defaultConfig {
@@ -62,8 +70,8 @@ android {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
@@ -137,6 +145,7 @@ android {
 val buildReaderQrNative = if (buildReaderQrNativeFromSource) {
     val androidComponents = extensions.getByType<ApplicationAndroidComponentsExtension>()
     tasks.register<Exec>("buildReaderQrNative") {
+        description = "cargo ndk build reader-qr-native"
         val nativeLibrary = readerQrNativeOutput.map { output ->
             output.file("arm64-v8a/libreader_qr_native.so")
         }
@@ -152,12 +161,12 @@ val buildReaderQrNative = if (buildReaderQrNativeFromSource) {
             androidComponents.sdkComponents.sdkDirectory.get().asFile.absolutePath,
         )
         commandLine(
-            "cargo",
+            cargoExecutable.get(),
             "ndk",
             "-t",
             "arm64-v8a",
             "-P",
-            "35",
+            android.defaultConfig.minSdk ?: 35,
             "-o",
             readerQrNativeOutput.get().asFile.absolutePath,
             "build",

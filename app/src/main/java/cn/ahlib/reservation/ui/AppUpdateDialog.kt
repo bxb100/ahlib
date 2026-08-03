@@ -1,5 +1,6 @@
 package cn.ahlib.reservation.ui
 
+import android.content.res.Configuration
 import android.text.format.Formatter
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -17,9 +18,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import cn.ahlib.reservation.R
 import cn.ahlib.reservation.ui.theme.spacing
+import cn.ahlib.reservation.update.AppUpdateInfo
 import cn.ahlib.reservation.update.UpdateDialogState
 
 @Composable
@@ -137,5 +140,26 @@ fun AppUpdateDialog(
                 )
             }
         },
+    )
+}
+
+
+@Preview(showSystemUi = true, uiMode = Configuration.UI_MODE_TYPE_APPLIANCE)
+@Composable
+fun PreviewDialog(modifier: Modifier = Modifier) {
+    AppUpdateDialog(
+        dialogState = UpdateDialogState.Available(
+            info = AppUpdateInfo(
+                versionName = "1.0.0",
+                apkSizeBytes = 1024 * 1024 * 5,
+                releaseNotes = "This is a sample release note for the app update.",
+                apkDownloadUrl = "https://example.com/app.apk",
+                checksumDownloadUrl = "https://example.com/app.apk.sha256",
+                tagName = "v1.0.0"
+            ),
+        ),
+        onStartDownload = {},
+        onInstall = {},
+        onDismiss = {},
     )
 }
