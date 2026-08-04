@@ -6,7 +6,6 @@ import android.graphics.Color as AndroidColor
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebResourceRequest
-import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -49,7 +48,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import cn.ahlib.reservation.R
+import androidx.core.net.toUri
 
 internal const val LIBRARY_RESERVATIONS_URL =
     "https://www.lib.ah.cn/myLibrary?menuIndex=1"
@@ -243,7 +245,9 @@ private class WebViewHolder(
             safeBrowsingEnabled = true
             cacheMode = WebSettings.LOAD_DEFAULT
         }
-        webView.webViewClient = LibraryWebViewClient(context)
+        val webViewClient = LibraryWebViewClient(context)
+        webView.webViewClient = webViewClient
+        webViewClient.installRequestOverride(webView)
         loadWithSessionCookies(webView, pageUrl, sessionCookies)
     }
 
@@ -255,19 +259,39 @@ private class WebViewHolder(
 private class LibraryWebViewClient(
     private val context: Context,
 ) : WebViewClient() {
+    private var injectRequestOverrideOnPageFinished = false
 
-    val extScript: String by lazy {
+    private val extScript: String by lazy {
         context.resources.openRawResource(R.raw.webview_ext)
             .bufferedReader(Charsets.UTF_8)
             .use { it.readText() }
     }
 
+    private val requestOverrideScript: String by lazy {
+        context.resources.openRawResource(R.raw.webview_request_override)
+            .bufferedReader(Charsets.UTF_8)
+            .use { it.readText() }
+    }
+
+    fun installRequestOverride(webView: WebView) {
+        if (WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) {
+            WebViewCompat.addDocumentStartJavaScript(
+                webView,
+                requestOverrideScript,
+                setOf("https://www.lib.ah.cn"),
+            )
+        } else {
+            injectRequestOverrideOnPageFinished = true
+        }
+    }
+
     override fun onPageFinished(view: WebView, url: String?) {
         super.onPageFinished(view, url)
-        if (url == null || !Uri.parse(url).isTrustedLibraryUrl()) {
-            return
-        }
+        if (url?.toUri()?.isTrustedLibraryUrl() != true) return
 
+        if (injectRequestOverrideOnPageFinished) {
+            view.evaluateJavascript(requestOverrideScript, null)
+        }
         view.evaluateJavascript(extScript, null)
     }
 
@@ -275,8 +299,6 @@ private class LibraryWebViewClient(
         view: WebView,
         request: WebResourceRequest,
     ): Boolean = !request.url.isTrustedLibraryUrl()
-
-
 }
 
 private fun Uri.isTrustedLibraryUrl(): Boolean =
@@ -290,7 +312,7 @@ private fun loadWithSessionCookies(
     pageUrl: String,
     sessionCookies: List<String>,
 ) {
-    if (!Uri.parse(pageUrl).isTrustedLibraryUrl()) {
+    if (!pageUrl.toUri().isTrustedLibraryUrl()) {
         webView.loadUrl(pageUrl)
         return
     }

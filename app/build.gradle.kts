@@ -42,6 +42,19 @@ val rustlsPlatformVerifierAar = layout.projectDirectory.file(
 fun String.asBuildConfigString(): String =
     "\"${replace("\\", "\\\\").replace("\"", "\\\"")}\""
 
+kotlin {
+    jvmToolchain(25)
+    compilerOptions {
+        jvmTarget = JvmTarget.fromTarget("25")
+        freeCompilerArgs.add(
+            "-opt-in=androidx.compose.foundation.style.ExperimentalFoundationStyleApi",
+        )
+        freeCompilerArgs.add(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+        )
+    }
+}
+
 android {
     namespace = "cn.ahlib.reservation"
     compileSdk = 37
@@ -105,20 +118,7 @@ android {
         sourceCompatibility = JavaVersion.VERSION_25
         targetCompatibility = JavaVersion.VERSION_25
     }
-
-    kotlin {
-        jvmToolchain(25)
-        compilerOptions {
-            jvmTarget = JvmTarget.fromTarget("25")
-            freeCompilerArgs.add(
-                "-opt-in=androidx.compose.foundation.style.ExperimentalFoundationStyleApi",
-            )
-            freeCompilerArgs.add(
-                "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
-            )
-        }
-    }
-
+    
     packaging {
         dex {
             useLegacyPackaging = true
@@ -191,6 +191,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.work.runtime.ktx)
+    implementation(libs.androidx.webkit)
 
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.compose.foundation)
