@@ -125,6 +125,7 @@
     <string name="sign_out_success">\u7b7e\u9000\u6210\u529f</string>
     <string name="scan_another">\u7ee7\u7eed\u626b\u7801</string>
     <string name="reader_profile">\u8bfb\u8005\u4fe1\u606f</string>
+    <string name="about">\u5173\u4e8e</string>
     <string name="name">\u59d3\u540d</string>
     <string name="mobile">\u624b\u673a\u53f7</string>
     <string name="reader_card">\u8bfb\u8005\u8bc1\u53f7</string>
@@ -254,7 +255,9 @@
     <string name="automation_logs_notice">\u4ec5\u4fdd\u7559\u5f53\u524d\u8fdb\u7a0b\u6700\u8fd1 %1$d \u6761\u65e5\u5fd7\uff0c\u8d85\u51fa\u540e\u81ea\u52a8\u79fb\u9664\u6700\u65e7\u8bb0\u5f55\uff1b\u8fdb\u7a0b\u7ed3\u675f\u540e\u4f1a\u6e05\u7a7a\u3002</string>
     <string name="app_update_check">\u68c0\u67e5\u66f4\u65b0</string>
     <string name="app_update_checking">\u6b63\u5728\u68c0\u67e5\u66f4\u65b0\u2026</string>
-    <string name="app_update_current_version">\u5f53\u524d\u7248\u672c %1$s</string>
+    <string name="app_update_current_version">\u5f53\u524d\u7248\u672c\u53f7 %1$s</string>
+    <string name="advanced_settings_clicks_remaining">\u518d\u70b9\u51fb%1$d\u6b21\u5373\u53ef\u5f00\u542f\u9ad8\u7ea7\u8bbe\u7f6e</string>
+    <string name="advanced_settings_enabled">\u9ad8\u7ea7\u8bbe\u7f6e\u5df2\u5f00\u542f</string>
     <string name="app_update_available_title">\u53d1\u73b0\u65b0\u7248\u672c %1$s</string>
     <string name="app_update_size">\u5b89\u88c5\u5305\u5927\u5c0f\uff1a%1$s</string>
     <string name="app_update_notes_empty">\u6682\u65e0\u66f4\u65b0\u8bf4\u660e</string>

@@ -309,6 +309,9 @@ private fun AuthenticatedContent(
     val automationSettings by automationManager.settings.collectAsStateWithLifecycle()
     val automationLogs by automationManager.logs.collectAsStateWithLifecycle()
     var profilePage by rememberSaveable { mutableStateOf(ProfilePage.PROFILE) }
+    var automationParentPage by rememberSaveable {
+        mutableStateOf(ProfilePage.PROFILE)
+    }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
     var showReaderQrCodeViewer by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(state.selectedTab) {
@@ -326,10 +329,29 @@ private fun AuthenticatedContent(
     }
 
     when (profilePage) {
+        ProfilePage.ABOUT -> {
+            AboutScreen(
+                appVersionName = BuildConfig.VERSION_NAME,
+                isCheckingUpdate = isCheckingUpdate,
+                isAdvancedSettingsEnabled =
+                    automationSettings.isAdvancedSettingsEnabled,
+                onBack = { profilePage = ProfilePage.PROFILE },
+                onCheckUpdate = onCheckUpdate,
+                onEnableAdvancedSettings =
+                    automationManager::enableAdvancedSettings,
+                onOpenAdvancedSettings = {
+                    automationParentPage = ProfilePage.ABOUT
+                    profilePage = ProfilePage.AUTOMATION
+                },
+                modifier = modifier,
+            )
+            return
+        }
+
         ProfilePage.AUTOMATION -> {
             AutomationSettingsScreen(
                 settings = automationSettings,
-                onBack = { profilePage = ProfilePage.PROFILE },
+                onBack = { profilePage = automationParentPage },
                 onAutoBookingEnabledChange =
                     automationManager::setAutoBookingEnabled,
                 onCancellationEnabledChange =
@@ -378,6 +400,8 @@ private fun AuthenticatedContent(
             selectedDate = state.roomDetail.selectedDayDate,
             selectedSlotId = state.roomDetail.selectedSlotId,
             autoBookingTarget = automationSettings.target,
+            isAdvancedSettingsEnabled =
+                automationSettings.isAdvancedSettingsEnabled,
             isLoading = state.roomDetail.isLoading,
             isAvailabilityRefreshing =
                 state.roomDetail.isAvailabilityRefreshing,
@@ -578,21 +602,28 @@ private fun AuthenticatedContent(
                             Text(stringResource(R.string.reservations_web_view))
                         },
                     )
-                    FloatingActionButtonMenuItem(
-                        onClick = {
-                            fabMenuExpanded = false
-                            profilePage = ProfilePage.AUTOMATION
-                        },
-                        icon = {
-                            Icon(
-                                imageVector = Icons.Outlined.Settings,
-                                contentDescription = null,
-                            )
-                        },
-                        text = {
-                            Text(stringResource(R.string.automation_settings_title))
-                        },
-                    )
+                    if (automationSettings.isAdvancedSettingsEnabled) {
+                        FloatingActionButtonMenuItem(
+                            onClick = {
+                                fabMenuExpanded = false
+                                automationParentPage = ProfilePage.PROFILE
+                                profilePage = ProfilePage.AUTOMATION
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Outlined.Settings,
+                                    contentDescription = null,
+                                )
+                            },
+                            text = {
+                                Text(
+                                    stringResource(
+                                        R.string.automation_settings_title,
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 }
             }
         },
@@ -653,14 +684,11 @@ private fun AuthenticatedContent(
                 profile = state.profile,
                 readerId = state.login.readerId,
                 readerQrContent = state.readerQrCode.content,
-                appVersionName = BuildConfig.VERSION_NAME,
                 isLoadingReaderQr = state.readerQrCode.isLoading,
-                isCheckingUpdate = isCheckingUpdate,
                 isLoggingOut = state.isLoggingOut,
                 onRetryReaderQrCode = viewModel::retryReaderQrCode,
                 onOpenReaderQrCode = { showReaderQrCodeViewer = true },
-                onOpenAutomation = { profilePage = ProfilePage.AUTOMATION },
-                onCheckUpdate = onCheckUpdate,
+                onOpenAbout = { profilePage = ProfilePage.ABOUT },
                 onLogout = viewModel::logout,
                 modifier = contentModifier,
             )
@@ -679,6 +707,7 @@ private fun AuthenticatedContent(
 
 private enum class ProfilePage {
     PROFILE,
+    ABOUT,
     AUTOMATION,
     LOGS,
 }

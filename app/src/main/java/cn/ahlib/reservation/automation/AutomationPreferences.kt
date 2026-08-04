@@ -12,6 +12,11 @@ class AutomationPreferences(context: Context) {
         PREFERENCES_NAME,
         Context.MODE_PRIVATE,
     )
+
+    init {
+        initializeAdvancedSettingsPreference()
+    }
+
     private val _settings = MutableStateFlow(readSettings())
 
     val settings: StateFlow<AutomationSettings> = _settings.asStateFlow()
@@ -47,6 +52,13 @@ class AutomationPreferences(context: Context) {
     fun setMockLocationEnabled(enabled: Boolean) {
         updateSettings {
             putBoolean(KEY_MOCK_LOCATION_ENABLED, enabled)
+        }
+    }
+
+    @Synchronized
+    fun enableAdvancedSettings() {
+        updateSettings {
+            putBoolean(KEY_ADVANCED_SETTINGS_ENABLED, true)
         }
     }
 
@@ -97,6 +109,16 @@ class AutomationPreferences(context: Context) {
         _settings.value = readSettings()
     }
 
+    private fun initializeAdvancedSettingsPreference() {
+        if (preferences.contains(KEY_ADVANCED_SETTINGS_ENABLED)) {
+            return
+        }
+        val hasLegacySettings = preferences.all.isNotEmpty()
+        preferences.edit {
+            putBoolean(KEY_ADVANCED_SETTINGS_ENABLED, hasLegacySettings)
+        }
+    }
+
     private fun readSettings(): AutomationSettings {
         val target = readTarget()
         return AutomationSettings(
@@ -117,6 +139,10 @@ class AutomationPreferences(context: Context) {
             ),
             mockLocationEnabled = preferences.getBoolean(
                 KEY_MOCK_LOCATION_ENABLED,
+                false,
+            ),
+            isAdvancedSettingsEnabled = preferences.getBoolean(
+                KEY_ADVANCED_SETTINGS_ENABLED,
                 false,
             ),
             target = target,
@@ -164,6 +190,7 @@ class AutomationPreferences(context: Context) {
         const val KEY_CANCELLATION_ENABLED = "cancellation_enabled"
         const val KEY_CANCELLATION_LEAD_MINUTES = "cancellation_lead_minutes"
         const val KEY_MOCK_LOCATION_ENABLED = "mock_location_enabled"
+        const val KEY_ADVANCED_SETTINGS_ENABLED = "advanced_settings_enabled"
         const val KEY_AUTO_SIGN_OUT_ROOM_ID = "auto_sign_out_room_id"
         const val KEY_AUTO_SIGN_OUT_IMAGE_URI = "auto_sign_out_image_uri"
         const val KEY_TARGET_ROOM_ID = "target_room_id"

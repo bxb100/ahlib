@@ -8,34 +8,31 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.CameraAlt
 import androidx.compose.material.icons.outlined.EventBusy
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.PhotoLibrary
-import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.SystemUpdate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -75,7 +72,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -106,7 +102,6 @@ import cn.ahlib.reservation.ui.theme.spacing
 import coil3.compose.AsyncImage
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -149,21 +144,16 @@ fun ReservationsScreen(
                 isScrollInProgress = listState.isScrollInProgress,
                 canLoadMore = latestCanLoadMore,
                 totalItemsCount = layoutInfo.totalItemsCount,
-                lastVisibleIndex =
-                    layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1,
+                lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1,
             )
-        }
-            .collect { observation ->
-                if (!observation.isScrollInProgress) {
-                    loadedDuringCurrentScroll = false
-                } else if (
-                    !loadedDuringCurrentScroll &&
-                    observation.shouldLoadMore()
-                ) {
-                    loadedDuringCurrentScroll = true
-                    latestOnLoadMore()
-                }
+        }.collect { observation ->
+            if (!observation.isScrollInProgress) {
+                loadedDuringCurrentScroll = false
+            } else if (!loadedDuringCurrentScroll && observation.shouldLoadMore()) {
+                loadedDuringCurrentScroll = true
+                latestOnLoadMore()
             }
+        }
     }
 
     PullToRefreshBox(
@@ -296,10 +286,7 @@ private data class ReservationLoadMoreObservation(
 )
 
 private fun ReservationLoadMoreObservation.shouldLoadMore(): Boolean =
-    isScrollInProgress &&
-        canLoadMore &&
-        totalItemsCount > 0 &&
-        lastVisibleIndex >= totalItemsCount - 2
+    isScrollInProgress && canLoadMore && totalItemsCount > 0 && lastVisibleIndex >= totalItemsCount - 2
 
 private fun ReservationStatusFilter.labelResource(): Int = when (this) {
     ReservationStatusFilter.PENDING_CHECK_IN -> R.string.sign_pending
@@ -382,16 +369,13 @@ private fun ReservationCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = record.reservationDateForDisplay()
-                        ?: stringResource(R.string.unknown_value),
+                    text = record.reservationDateForDisplay() ?: stringResource(R.string.unknown_value),
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                 )
                 Text(
-                    text = record.roomName
-                        ?.takeIf(String::isNotBlank)
-                        ?: stringResource(R.string.unknown_value),
+                    text = record.roomName?.takeIf(String::isNotBlank) ?: stringResource(R.string.unknown_value),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold,
@@ -402,9 +386,11 @@ private fun ReservationCard(
                     record.isPendingCheckIn() -> record.signInDeadlineForDisplay()?.let {
                         stringResource(R.string.reservation_sign_in_deadline_compact, it)
                     }
+
                     record.signState == SIGN_STATE_SIGNED_IN -> {
                         stringResource(R.string.reservation_sign_out_deadline_compact)
                     }
+
                     else -> null
                 }
                 deadlineText?.let {
@@ -416,8 +402,7 @@ private fun ReservationCard(
                     )
                 }
                 StatusPill(
-                    text = record.statusMergeName
-                        ?.takeIf(String::isNotBlank)
+                    text = record.statusMergeName?.takeIf(String::isNotBlank)
                         ?: stringResource(R.string.status_unknown),
                 )
                 Icon(
@@ -478,10 +463,7 @@ private fun ReservationCard(
                         label = stringResource(R.string.sign_status),
                         value = signStateLabel(record.signState),
                     )
-                    if (
-                        record.isPendingCheckIn() ||
-                        record.isCancellationEligible()
-                    ) {
+                    if (record.isPendingCheckIn() || record.isCancellationEligible()) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(
@@ -494,8 +476,7 @@ private fun ReservationCard(
                                 TextButton(
                                     onClick = onAddToCalendar,
                                     colors = ButtonDefaults.textButtonColors(
-                                        contentColor =
-                                            MaterialTheme.colorScheme.onSurfaceVariant,
+                                        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                                     ),
                                 ) {
                                     Icon(
@@ -611,9 +592,7 @@ fun ScannerScreen(
                     is QrImageScanResult.Success -> onScan(result.code)
 
                     is QrImageScanResult.Failure -> {
-                        if (
-                            result.error is QrImageScanError.ImageFailure
-                        ) {
+                        if (result.error is QrImageScanError.ImageFailure) {
                             imageHistory = imageHistoryStore.remove(uri.toString())
                         }
                         imageScanError = result.error
@@ -641,10 +620,9 @@ fun ScannerScreen(
     ) { granted ->
         hasRequestedCamera = true
         hasCameraPermission = granted
-        cameraPermissionPermanentlyDenied = !granted &&
-            context.arePermissionsPermanentlyDenied(
-                listOf(Manifest.permission.CAMERA),
-            )
+        cameraPermissionPermanentlyDenied = !granted && context.arePermissionsPermanentlyDenied(
+            listOf(Manifest.permission.CAMERA),
+        )
     }
 
     DisposableEffect(lifecycleOwner, context) {
@@ -674,11 +652,7 @@ fun ScannerScreen(
 
     val operationActive = isChecking || isLocating || isSigningIn || isSigningOut
     val scannerInteractionBlocked =
-        operationActive ||
-            isImageScanning ||
-            isImagePickerOpen ||
-            imageScanError != null ||
-            cameraScanError != null
+        operationActive || isImageScanning || isImagePickerOpen || imageScanError != null || cameraScanError != null
     val imageErrorText = imageScanError?.let { error ->
         stringResource(error.messageResource())
     }
@@ -686,8 +660,7 @@ fun ScannerScreen(
         stringResource(error.messageResource())
     }
     val showFeedback =
-        operationActive || isImageScanning || imageErrorText != null ||
-            cameraErrorText != null || feedbackText != null
+        operationActive || isImageScanning || imageErrorText != null || cameraErrorText != null || feedbackText != null
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -708,8 +681,7 @@ fun ScannerScreen(
                         capturedImage?.let { image ->
                             lifecycleOwner.lifecycleScope.launch {
                                 try {
-                                    val uri = imageHistoryStore
-                                        .saveCapturedQrImage(image)
+                                    val uri = imageHistoryStore.saveCapturedQrImage(image)
                                     imageHistory = imageHistoryStore.record(uri)
                                 } catch (exception: CancellationException) {
                                     throw exception
@@ -792,9 +764,7 @@ fun ScannerScreen(
                             ),
                         )
                     },
-                    enabled = !operationActive &&
-                        !isImageScanning &&
-                        !isImagePickerOpen,
+                    enabled = !operationActive && !isImageScanning && !isImagePickerOpen,
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.PhotoLibrary,
@@ -842,6 +812,7 @@ fun ScannerScreen(
                                 isImageScanning -> {
                                     stringResource(R.string.scanner_image_processing)
                                 }
+
                                 isChecking -> stringResource(R.string.scanner_checking)
                                 isLocating -> stringResource(R.string.locating)
                                 isSigningIn -> stringResource(R.string.signing_in)
@@ -891,8 +862,7 @@ fun ScannerScreen(
             }
 
             if (imageHistory.isNotEmpty()) {
-                val historyEnabled =
-                    !isImagePickerOpen && !isImageScanning && !operationActive
+                val historyEnabled = !isImagePickerOpen && !isImageScanning && !operationActive
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     shape = MaterialTheme.shapes.extraLarge,
@@ -1016,14 +986,11 @@ fun ProfileScreen(
     profile: UserInfo?,
     readerId: String,
     readerQrContent: String?,
-    appVersionName: String,
     isLoadingReaderQr: Boolean,
-    isCheckingUpdate: Boolean,
     isLoggingOut: Boolean,
     onRetryReaderQrCode: () -> Unit,
     onOpenReaderQrCode: () -> Unit,
-    onOpenAutomation: () -> Unit,
-    onCheckUpdate: () -> Unit,
+    onOpenAbout: () -> Unit,
     onLogout: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -1033,15 +1000,10 @@ fun ProfileScreen(
     val readerStatusValue = if (readerStatusResource != null) {
         stringResource(readerStatusResource)
     } else {
-        profile?.readerStatus
-            ?.trim()
-            ?.takeIf(String::isNotBlank)
-            ?: missingValue
+        profile?.readerStatus?.trim()?.takeIf(String::isNotBlank) ?: missingValue
     }
     val normalizedReaderId = readerId.trim()
-    val readerIdValue = normalizedReaderId
-        .takeIf(String::isNotEmpty)
-        ?: missingValue
+    val readerIdValue = normalizedReaderId.takeIf(String::isNotEmpty) ?: missingValue
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -1078,9 +1040,7 @@ fun ProfileScreen(
                         ) {
                             LabeledValue(
                                 label = stringResource(R.string.mobile),
-                                value = profile?.mobile
-                                    ?.takeIf(String::isNotBlank)
-                                    ?: missingValue,
+                                value = profile?.mobile?.takeIf(String::isNotBlank) ?: missingValue,
                             )
                             LabeledValue(
                                 label = stringResource(R.string.reader_card),
@@ -1120,39 +1080,17 @@ fun ProfileScreen(
                 }
             }
         }
-        item(key = "automation") {
+        item(key = "about") {
             FilledTonalButton(
-                onClick = onOpenAutomation,
+                onClick = onOpenAbout,
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Icon(
-                    imageVector = Icons.Outlined.Settings,
+                    imageVector = Icons.Outlined.Info,
                     contentDescription = null,
                 )
                 Spacer(modifier = Modifier.size(8.dp))
-                Text(stringResource(R.string.automation_settings_title))
-            }
-        }
-        item(key = "app-update") {
-            FilledTonalButton(
-                onClick = onCheckUpdate,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !isCheckingUpdate,
-            ) {
-                if (isCheckingUpdate) {
-                    LoadingIndicator(
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text(stringResource(R.string.app_update_checking))
-                } else {
-                    Icon(
-                        imageVector = Icons.Outlined.SystemUpdate,
-                        contentDescription = null,
-                    )
-                    Spacer(modifier = Modifier.size(8.dp))
-                    Text(stringResource(R.string.app_update_check))
-                }
+                Text(stringResource(R.string.about))
             }
         }
         item(key = "logout") {
@@ -1182,18 +1120,6 @@ fun ProfileScreen(
                     Text(stringResource(R.string.logout))
                 }
             }
-        }
-        item(key = "app-version") {
-            Text(
-                text = stringResource(
-                    R.string.app_update_current_version,
-                    appVersionName,
-                ),
-                modifier = Modifier.fillMaxWidth(),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
         }
     }
 
@@ -1229,12 +1155,11 @@ fun ProfileScreen(
     }
 }
 
-internal fun readerStatusLabelResource(readerStatus: String?): Int? =
-    when (readerStatus?.trim()) {
-        "1" -> R.string.reader_status_valid
-        "2" -> R.string.reader_status_verifying
-        "3" -> R.string.reader_status_lost
-        "4" -> R.string.reader_status_suspended
-        "5" -> R.string.reader_status_cancelled
-        else -> null
-    }
+internal fun readerStatusLabelResource(readerStatus: String?): Int? = when (readerStatus?.trim()) {
+    "1" -> R.string.reader_status_valid
+    "2" -> R.string.reader_status_verifying
+    "3" -> R.string.reader_status_lost
+    "4" -> R.string.reader_status_suspended
+    "5" -> R.string.reader_status_cancelled
+    else -> null
+}

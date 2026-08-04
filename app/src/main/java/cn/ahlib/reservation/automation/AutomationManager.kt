@@ -159,6 +159,10 @@ class AutomationManager(
         )
     }
 
+    fun enableAdvancedSettings() {
+        preferences.enableAdvancedSettings()
+    }
+
     fun shouldUseMockLocation(): Boolean =
         settings.value.mockLocationEnabled
 

@@ -65,14 +65,11 @@ class ReaderQrCodePlaceholderTest {
                     profile = null,
                     readerId = "reader-123",
                     readerQrContent = null,
-                    appVersionName = "test",
                     isLoadingReaderQr = false,
-                    isCheckingUpdate = false,
                     isLoggingOut = false,
                     onRetryReaderQrCode = { retryCount++ },
                     onOpenReaderQrCode = {},
-                    onOpenAutomation = {},
-                    onCheckUpdate = {},
+                    onOpenAbout = {},
                     onLogout = {},
                 )
             }
@@ -83,6 +80,14 @@ class ReaderQrCodePlaceholderTest {
                 context.getString(R.string.reader_qr_description),
             )
             .assertCountEquals(0)
+        composeRule
+            .onAllNodesWithText(
+                context.getString(R.string.automation_settings_title),
+            )
+            .assertCountEquals(0)
+        composeRule
+            .onNodeWithText(context.getString(R.string.about))
+            .assertIsDisplayed()
         composeRule
             .onAllNodesWithText(context.getString(R.string.reader_qr_loading))
             .assertCountEquals(0)

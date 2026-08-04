@@ -18,6 +18,7 @@ data class AutomationSettings(
     val cancellationEnabled: Boolean = false,
     val cancellationLeadMinutes: Int = DEFAULT_CANCELLATION_LEAD_MINUTES,
     val mockLocationEnabled: Boolean = false,
+    val isAdvancedSettingsEnabled: Boolean = false,
     val target: AutoBookingTarget? = null,
     val automaticSignOutQrCode: AutomaticSignOutQrCode? = null,
 )

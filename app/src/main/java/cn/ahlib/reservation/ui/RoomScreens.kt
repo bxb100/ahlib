@@ -101,6 +101,7 @@ import cn.ahlib.reservation.ui.theme.ReservationDesignSystem
 import cn.ahlib.reservation.ui.theme.spacing
 import java.util.GregorianCalendar
 import kotlinx.coroutines.delay
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -393,6 +394,7 @@ fun RoomDetailScreen(
     selectedDate: String?,
     selectedSlotId: String?,
     autoBookingTarget: AutoBookingTarget?,
+    isAdvancedSettingsEnabled: Boolean,
     isLoading: Boolean,
     isAvailabilityRefreshing: Boolean,
     isBooking: Boolean,
@@ -483,6 +485,7 @@ fun RoomDetailScreen(
                     selectedDate = selectedDate,
                     selectedSlotId = selectedSlotId,
                     autoBookingTarget = autoBookingTarget,
+                    isAdvancedSettingsEnabled = isAdvancedSettingsEnabled,
                     isAvailabilityRefreshing = isAvailabilityRefreshing,
                     errorText = detailErrorText,
                     onRetry = onRetry,
@@ -529,6 +532,7 @@ private fun RoomDetailBody(
     selectedDate: String?,
     selectedSlotId: String?,
     autoBookingTarget: AutoBookingTarget?,
+    isAdvancedSettingsEnabled: Boolean,
     isAvailabilityRefreshing: Boolean,
     errorText: String?,
     onRetry: () -> Unit,
@@ -559,6 +563,7 @@ private fun RoomDetailBody(
                     selectedDay = selectedDay,
                     selectedSlotId = selectedSlotId,
                     autoBookingTarget = autoBookingTarget,
+                    isAdvancedSettingsEnabled = isAdvancedSettingsEnabled,
                     errorText = errorText,
                     onRetry = onRetry,
                     onSelectDate = onSelectDate,
@@ -677,6 +682,7 @@ private fun ReservationAvailabilitySection(
     selectedDay: AvailabilityDay?,
     selectedSlotId: String?,
     autoBookingTarget: AutoBookingTarget?,
+    isAdvancedSettingsEnabled: Boolean,
     errorText: String?,
     onRetry: () -> Unit,
     onSelectDate: (String) -> Unit,
@@ -754,11 +760,13 @@ private fun ReservationAvailabilitySection(
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold,
                         )
-                        Text(
-                            text = stringResource(R.string.auto_booking_swipe_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
+                        if (isAdvancedSettingsEnabled) {
+                            Text(
+                                text = stringResource(R.string.auto_booking_swipe_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                         if (selectedDay == null || selectedDay.list.isEmpty()) {
                             Text(
                                 text = stringResource(R.string.no_available_slots),
@@ -769,18 +777,27 @@ private fun ReservationAvailabilitySection(
                         } else {
                             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                                 selectedDay.list.forEach { slot ->
-                                    SwipeableAvailabilitySlotCard(
-                                        slot = slot,
-                                        selected = slot.id == selectedSlotId,
-                                        isAutoBookingTarget = autoBookingTarget
-                                            ?.matches(roomId, slot) == true,
-                                        onClick = { onSelectSlot(slot.id) },
-                                        onConfigureAutoBooking = {
-                                            onConfigureAutoBooking(slot)
-                                        },
-                                        onClearAutoBookingTarget =
-                                            onClearAutoBookingTarget,
-                                    )
+                                    if (isAdvancedSettingsEnabled) {
+                                        SwipeableAvailabilitySlotCard(
+                                            slot = slot,
+                                            selected = slot.id == selectedSlotId,
+                                            isAutoBookingTarget = autoBookingTarget
+                                                ?.matches(roomId, slot) == true,
+                                            onClick = { onSelectSlot(slot.id) },
+                                            onConfigureAutoBooking = {
+                                                onConfigureAutoBooking(slot)
+                                            },
+                                            onClearAutoBookingTarget =
+                                                onClearAutoBookingTarget,
+                                        )
+                                    } else {
+                                        AvailabilitySlotCard(
+                                            slot = slot,
+                                            selected = slot.id == selectedSlotId,
+                                            isAutoBookingTarget = false,
+                                            onClick = { onSelectSlot(slot.id) },
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -1143,7 +1160,7 @@ private fun AvailabilityDay.toAvailabilityDateLabel(): AvailabilityDateLabel {
             month = month.toString().padStart(2, '0'),
             day = day.toString().padStart(2, '0'),
         )
-    } catch (exception: IllegalArgumentException) {
+    } catch (_: IllegalArgumentException) {
         AvailabilityDateLabel(weekday = "", month = "", day = normalized)
     }
 }
@@ -1365,7 +1382,7 @@ private fun ResilientRoomImage(
             imageState is AsyncImagePainter.State.Error &&
             retryAttempt < MAX_LIBRARY_IMAGE_AUTO_RETRIES
         ) {
-            delay(350)
+            delay(350.milliseconds)
             imageState = AsyncImagePainter.State.Empty
             retryAttempt += 1
         }
