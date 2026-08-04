@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+#MISE description="Format, lint, and test the Rust native crate"
+
+if [ ! -f native/reader-qr-native/Cargo.toml ]; then
+  echo "Native source is unavailable; skipping Rust checks."
+  exit 0
+fi
+cargo fmt --manifest-path native/reader-qr-native/Cargo.toml -- --check
+cargo clippy --manifest-path native/reader-qr-native/Cargo.toml --all-targets -- -D warnings
+cargo test --manifest-path native/reader-qr-native/Cargo.toml

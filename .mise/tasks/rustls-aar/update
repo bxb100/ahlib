@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#MISE description="Update the vendored rustls Android verifier AAR"
+
+set -eu
+
+native_manifest="native/reader-qr-native/Cargo.toml"
+destination_aar="app/libs/rustls-platform-verifier.aar"
+
+if [ ! -f "$native_manifest" ]; then
+  echo "Native source is unavailable; keeping the vendored rustls verifier AAR."
+  exit 0
+fi
+
+metadata="$(cargo metadata \
+  --format-version 1 \
+  --filter-platform aarch64-linux-android \
+  --locked \
+  --manifest-path "$native_manifest")"
+component_manifest="$(printf '%s' "$metadata" | jq -er \
+  'first(.packages[] | select(.name == "rustls-platform-verifier-android")).manifest_path')"
+component_version="$(printf '%s' "$metadata" | jq -er \
+  'first(.packages[] | select(.name == "rustls-platform-verifier-android")).version')"
+component_root="$(dirname "$component_manifest")"
+source_aar="$component_root/maven/rustls/rustls-platform-verifier/$component_version/rustls-platform-verifier-$component_version.aar"
+
+if [ ! -f "$source_aar" ]; then
+  echo "Compatible rustls verifier AAR is missing: $source_aar" >&2
+  exit 1
+fi
+
+if [ -f "$destination_aar" ] && cmp -s "$source_aar" "$destination_aar"; then
+  echo "rustls verifier AAR is already up to date at version $component_version."
+  exit 0
+fi
+
+mkdir -p "$(dirname "$destination_aar")"
+cp "$source_aar" "$destination_aar"
+echo "Updated rustls verifier AAR to version $component_version."

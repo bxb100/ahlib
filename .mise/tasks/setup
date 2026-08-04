@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+#MISE description="Install Android SDK components and the Rust Android target"
+
+command sdkmanager >/dev/null 2>&1 || {
+  echo "Android SDK is not installed. Please install it first."
+  exit 1
+}
+
+sdkmanager --licenses
+sdkmanager --install \
+  "platform-tools" \
+  "platforms;android-37.0" \
+  "build-tools;37.0.0"
+if [ -f native/reader-qr-native/Cargo.toml ]; then
+  sdkmanager --install "ndk;29.0.14206865"
+  rustup target add aarch64-linux-android
+fi

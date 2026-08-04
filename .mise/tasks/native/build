@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+#MISE description="Build the Android arm64 native library"
+
+if [ ! -f native/reader-qr-native/Cargo.toml ]; then
+  echo "Native source is unavailable; using the prebuilt library."
+  exit 0
+fi
+cd "$MISE_ORIGINAL_CWD/native/reader-qr-native" || exit
+cargo ndk \
+  -t arm64-v8a \
+  -P 35 \
+  -o ../../app/build/generated/readerQrNative/jniLibs \
+  build --release
