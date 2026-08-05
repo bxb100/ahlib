@@ -14,6 +14,10 @@ import cn.ahlib.reservation.data.AvailabilityDay
 import cn.ahlib.reservation.data.AvailabilitySlot
 import cn.ahlib.reservation.data.Captcha
 import cn.ahlib.reservation.data.Category
+import cn.ahlib.reservation.data.CookieCloudConfig
+import cn.ahlib.reservation.data.CookieCloudCryptoType
+import cn.ahlib.reservation.data.CookieCloudFailureReason
+import cn.ahlib.reservation.data.CookieCloudSyncResult
 import cn.ahlib.reservation.data.CreateReservationRequest
 import cn.ahlib.reservation.data.ReaderQrCodeFailure
 import cn.ahlib.reservation.data.ReaderQrCodeRepository
@@ -49,6 +53,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
 sealed interface UiText {
@@ -117,7 +122,37 @@ data class LoginUiState(
     val isSubmitting: Boolean = false,
     val captchaError: UiText? = null,
     val error: UiText? = null,
+    val cookieCloud: CookieCloudUiState = CookieCloudUiState(),
 )
+
+data class CookieCloudUiState(
+    val serverUrl: String = "",
+    val userKey: String = "",
+    val password: String = "",
+    val cryptoType: CookieCloudCryptoType = CookieCloudCryptoType.LEGACY,
+    val isConfigured: Boolean = false,
+    val isSyncing: Boolean = false,
+    val error: UiText? = null,
+)
+
+private fun CookieCloudConfig?.toUiState(
+    isSyncing: Boolean = false,
+    error: UiText? = null,
+): CookieCloudUiState =
+    this?.let { config ->
+        CookieCloudUiState(
+            serverUrl = config.serverUrl,
+            userKey = config.userKey,
+            password = config.password,
+            cryptoType = config.cryptoType,
+            isConfigured = true,
+            isSyncing = isSyncing,
+            error = error,
+        )
+    } ?: CookieCloudUiState(
+        isSyncing = isSyncing,
+        error = error,
+    )
 
 data class PhoneBindingUiState(
     val mobile: String = "",
@@ -367,10 +402,12 @@ class ReservationViewModel(
     private var reservationRequestId = 0L
     private var scannerRequestId = 0L
     private var readerQrRequestId = 0L
+    private var cookieCloudConfigRevision = 0L
 
     private var startupJob: Job? = null
     private var loginCaptchaJob: Job? = null
     private var loginJob: Job? = null
+    private var cookieCloudJob: Job? = null
     private var phoneCaptchaJob: Job? = null
     private var phoneSmsJob: Job? = null
     private var smsCountdownJob: Job? = null
@@ -383,8 +420,30 @@ class ReservationViewModel(
     private var scannerJob: Job? = null
     private var readerQrCodeJob: Job? = null
     private var logoutJob: Job? = null
+    private var cookieCloudConfig: CookieCloudConfig? = null
 
     init {
+        val configRevision = cookieCloudConfigRevision
+        viewModelScope.launch {
+            val config = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                repository.cookieCloudConfig()
+            }
+            if (configRevision != cookieCloudConfigRevision) {
+                return@launch
+            }
+            cookieCloudConfig = config
+            _uiState.update { state ->
+                if (state.login.cookieCloud.isSyncing) {
+                    state
+                } else {
+                    state.copy(
+                        login = state.login.copy(
+                            cookieCloud = config.toUiState(),
+                        ),
+                    )
+                }
+            }
+        }
         restoreSession()
     }
 
@@ -507,10 +566,35 @@ class ReservationViewModel(
         }
         readerQrCodeJob = viewModelScope.launch {
             val cookieHeader = repository.authenticationCookieHeader()
-            val result = if (cookieHeader == null) {
+            val initialResult = if (cookieHeader == null) {
                 ReaderQrCodeResult.Failure(ReaderQrCodeFailure.SESSION_EXPIRED)
             } else {
                 readerQrCodeRepository.refresh(cookieHeader)
+            }
+            val result = if (
+                initialResult is ReaderQrCodeResult.Failure &&
+                initialResult.reason == ReaderQrCodeFailure.SESSION_EXPIRED
+            ) {
+                val sessionResult = repository.isLoggedIn()
+                val refreshedCookieHeader = repository.authenticationCookieHeader()
+                when {
+                    sessionResult is ApiResult.Success &&
+                        sessionResult.data &&
+                        refreshedCookieHeader != null -> {
+                        readerQrCodeRepository.refresh(refreshedCookieHeader)
+                    }
+
+                    sessionResult is ApiResult.Failure &&
+                        !sessionResult.exception.isSessionExpired -> {
+                        ReaderQrCodeResult.Failure(
+                            sessionResult.exception.toReaderQrCodeFailure(),
+                        )
+                    }
+
+                    else -> initialResult
+                }
+            } else {
+                initialResult
             }
             if (requestId != readerQrRequestId) {
                 return@launch
@@ -528,6 +612,10 @@ class ReservationViewModel(
                 }
 
                 is ReaderQrCodeResult.Failure -> {
+                    if (result.reason == ReaderQrCodeFailure.SESSION_EXPIRED) {
+                        expireSession()
+                        return@launch
+                    }
                     _uiState.update { current ->
                         current.copy(
                             readerQrCode = current.readerQrCode.copy(
@@ -555,6 +643,148 @@ class ReservationViewModel(
     fun selectLoginRetention(retention: LoginRetention) {
         _uiState.update { state ->
             state.copy(login = state.login.copy(retention = retention, error = null))
+        }
+    }
+
+    fun saveCookieCloudAndLogin(
+        serverUrl: String,
+        userKey: String,
+        password: String,
+        cryptoType: CookieCloudCryptoType,
+    ) {
+        val config = CookieCloudConfig.normalizedOrNull(
+            serverUrl = serverUrl,
+            userKey = userKey,
+            password = password,
+            cryptoType = cryptoType,
+        )
+        if (config == null) {
+            _uiState.update { state ->
+                state.copy(
+                    login = state.login.copy(
+                        cookieCloud = state.login.cookieCloud.copy(
+                            error = UiText.Resource(
+                                R.string.cookie_cloud_error_invalid_config,
+                            ),
+                        ),
+                    ),
+                )
+            }
+            return
+        }
+
+        val login = _uiState.value.login
+        if (
+            _uiState.value.stage != AppStage.LOGIN ||
+            login.cookieCloud.isSyncing
+        ) {
+            return
+        }
+
+        loginJob?.cancel()
+        cookieCloudJob?.cancel()
+        cookieCloudConfigRevision++
+        val previousConfig = cookieCloudConfig
+        val generation = sessionGeneration
+        _uiState.update { state ->
+            state.copy(
+                login = state.login.copy(
+                    isSubmitting = false,
+                    error = null,
+                    cookieCloud = config.toUiState(
+                        isSyncing = true,
+                    ),
+                ),
+            )
+        }
+        cookieCloudJob = viewModelScope.launch {
+            val saved = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                repository.saveCookieCloudConfig(config)
+            }
+            if (!isCurrentSession(generation) || _uiState.value.stage != AppStage.LOGIN) {
+                return@launch
+            }
+            if (!saved) {
+                _uiState.update { state ->
+                    state.copy(
+                        login = state.login.copy(
+                            cookieCloud = previousConfig.toUiState(
+                                error = UiText.Resource(
+                                    R.string.cookie_cloud_error_storage_failed,
+                                ),
+                            ),
+                        ),
+                    )
+                }
+                return@launch
+            }
+
+            cookieCloudConfig = config
+            when (val syncResult = repository.syncCookieCloudSession()) {
+                is CookieCloudSyncResult.Success -> {
+                    when (val profileResult = repository.getUserInfo()) {
+                        is ApiResult.Success -> {
+                            if (
+                                !isCurrentSession(generation) ||
+                                _uiState.value.stage != AppStage.LOGIN
+                            ) {
+                                return@launch
+                            }
+                            val profile = profileResult.data
+                            if (profile == null) {
+                                showCookieCloudLoginFailure(config)
+                            } else {
+                                acceptProfile(profile)
+                            }
+                        }
+
+                        is ApiResult.Failure -> {
+                            if (
+                                isCurrentSession(generation) &&
+                                _uiState.value.stage == AppStage.LOGIN
+                            ) {
+                                showCookieCloudLoginFailure(
+                                    config = config,
+                                    error = profileResult.exception.toUiText(),
+                                )
+                            }
+                        }
+                    }
+                }
+
+                is CookieCloudSyncResult.Failure -> {
+                    if (
+                        isCurrentSession(generation) &&
+                        _uiState.value.stage == AppStage.LOGIN
+                    ) {
+                        _uiState.update { state ->
+                            state.copy(
+                                login = state.login.copy(
+                                    cookieCloud = config.toUiState(
+                                        error = syncResult.reason.toUiText(),
+                                    ),
+                                ),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fun clearCookieCloudConfig() {
+        if (_uiState.value.login.cookieCloud.isSyncing) {
+            return
+        }
+        cookieCloudConfig = null
+        cookieCloudConfigRevision++
+        repository.clearCookieCloudConfig()
+        _uiState.update { state ->
+            state.copy(
+                login = state.login.copy(
+                    cookieCloud = CookieCloudUiState(),
+                ),
+            )
         }
     }
 
@@ -1643,7 +1873,10 @@ class ReservationViewModel(
         _uiState.value = ReservationUiState(
             stage = AppStage.LOGIN,
             isStartupLoading = false,
-            login = LoginUiState(readerId = readerId),
+            login = LoginUiState(
+                readerId = readerId,
+                cookieCloud = cookieCloudConfig.toUiState(),
+            ),
             message = messageId?.let(::newMessage),
         )
         refreshLoginCaptcha()
@@ -1662,6 +1895,7 @@ class ReservationViewModel(
             login = LoginUiState(
                 readerId = readerId,
                 isCaptchaLoading = true,
+                cookieCloud = cookieCloudConfig.toUiState(),
             ),
             message = newMessage(R.string.session_expired),
         )
@@ -2276,6 +2510,7 @@ class ReservationViewModel(
         startupJob?.cancel()
         loginCaptchaJob?.cancel()
         loginJob?.cancel()
+        cookieCloudJob?.cancel()
         phoneCaptchaJob?.cancel()
         phoneSmsJob?.cancel()
         smsCountdownJob?.cancel()
@@ -2292,6 +2527,54 @@ class ReservationViewModel(
         UiMessage(
             id = messageIds.incrementAndGet(),
             text = UiText.Resource(id),
+        )
+
+    private fun showCookieCloudLoginFailure(
+        config: CookieCloudConfig,
+        error: UiText = UiText.Resource(R.string.cookie_cloud_error_login_failed),
+    ) {
+        _uiState.update { state ->
+            state.copy(
+                login = state.login.copy(
+                    cookieCloud = config.toUiState(
+                        error = error,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun ApiException.toReaderQrCodeFailure(): ReaderQrCodeFailure = when (kind) {
+        ApiErrorKind.SESSION_EXPIRED -> ReaderQrCodeFailure.SESSION_EXPIRED
+        ApiErrorKind.NETWORK -> ReaderQrCodeFailure.NETWORK
+        ApiErrorKind.HTTP -> ReaderQrCodeFailure.HTTP
+        ApiErrorKind.BUSINESS -> ReaderQrCodeFailure.BUSINESS
+        ApiErrorKind.SERIALIZATION,
+        ApiErrorKind.VALIDATION,
+        ApiErrorKind.UNKNOWN,
+        -> ReaderQrCodeFailure.INVALID_RESPONSE
+    }
+
+    private fun CookieCloudFailureReason.toUiText(): UiText.Resource =
+        UiText.Resource(
+            when (this) {
+                CookieCloudFailureReason.INVALID_CONFIG ->
+                    R.string.cookie_cloud_error_invalid_config
+
+                CookieCloudFailureReason.NETWORK -> R.string.cookie_cloud_error_network
+                CookieCloudFailureReason.SERVER -> R.string.cookie_cloud_error_server
+                CookieCloudFailureReason.INVALID_RESPONSE ->
+                    R.string.cookie_cloud_error_invalid_response
+
+                CookieCloudFailureReason.DECRYPTION_FAILED ->
+                    R.string.cookie_cloud_error_decrypt_failed
+
+                CookieCloudFailureReason.TOKEN_MISSING ->
+                    R.string.cookie_cloud_error_pc_token_missing
+
+                CookieCloudFailureReason.STORAGE_FAILED ->
+                    R.string.cookie_cloud_error_storage_failed
+            },
         )
 
     private fun ApiException.toUiText(): UiText = when (kind) {

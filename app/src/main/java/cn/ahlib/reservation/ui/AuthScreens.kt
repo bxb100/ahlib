@@ -32,9 +32,11 @@ import androidx.compose.material.icons.outlined.Lock
 import androidx.compose.material.icons.outlined.PhoneAndroid
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Security
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Sms
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -44,6 +46,7 @@ import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -51,8 +54,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +87,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import cn.ahlib.reservation.R
+import cn.ahlib.reservation.data.CookieCloudConfig
+import cn.ahlib.reservation.data.CookieCloudCryptoType
 import cn.ahlib.reservation.ui.theme.spacing
 import coil3.compose.AsyncImage
 
@@ -118,10 +125,25 @@ fun LoginScreen(
     onRefreshCaptcha: () -> Unit,
     onLogin: () -> Unit,
     modifier: Modifier = Modifier,
+    cookieCloudServerUrl: String = "",
+    cookieCloudUserKey: String = "",
+    cookieCloudPassword: String = "",
+    cookieCloudCryptoType: CookieCloudCryptoType = CookieCloudCryptoType.LEGACY,
+    isCookieCloudConfigured: Boolean = false,
+    isCookieCloudSyncing: Boolean = false,
+    cookieCloudErrorText: String? = null,
+    onSaveCookieCloudAndLogin: (
+        serverUrl: String,
+        userKey: String,
+        password: String,
+        cryptoType: CookieCloudCryptoType,
+    ) -> Unit = { _, _, _, _ -> },
+    onClearCookieCloud: () -> Unit = {},
 ) {
     val focusManager = LocalFocusManager.current
     val passwordFocusRequester = remember { FocusRequester() }
     var isPasswordVisible by rememberSaveable { mutableStateOf(false) }
+    var isCookieCloudDialogVisible by remember { mutableStateOf(false) }
     val hasCaptcha = !captchaDataUri.isNullOrBlank()
     val canLogin = readerId.isNotBlank() &&
         password.isNotBlank() &&
@@ -156,11 +178,37 @@ fun LoginScreen(
                     ),
                 verticalArrangement = Arrangement.Center,
             ) {
-                AuthHeader(
-                    icon = Icons.Outlined.LocalLibrary,
-                    titleRes = R.string.login_title,
-                    descriptionRes = R.string.login_subtitle,
-                )
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    AuthHeader(
+                        icon = Icons.Outlined.LocalLibrary,
+                        titleRes = R.string.login_title,
+                        descriptionRes = R.string.login_subtitle,
+                    )
+                    IconButton(
+                        onClick = { isCookieCloudDialogVisible = true },
+                        modifier = Modifier
+                            .align(Alignment.TopEnd)
+                            .size(48.dp),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            contentColor = if (isCookieCloudConfigured) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        ),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.Settings,
+                            contentDescription = stringResource(
+                                if (isCookieCloudConfigured) {
+                                    R.string.cookie_cloud_settings_configured
+                                } else {
+                                    R.string.cookie_cloud_settings
+                                },
+                            ),
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(MaterialTheme.spacing.section))
 
@@ -304,7 +352,337 @@ fun LoginScreen(
             }
         }
     }
+
+    if (isCookieCloudDialogVisible) {
+        CookieCloudSettingsDialog(
+            initialServerUrl = cookieCloudServerUrl,
+            initialUserKey = cookieCloudUserKey,
+            initialPassword = cookieCloudPassword,
+            initialCryptoType = cookieCloudCryptoType,
+            isConfigured = isCookieCloudConfigured,
+            isSyncing = isCookieCloudSyncing,
+            errorText = cookieCloudErrorText,
+            onDismiss = { isCookieCloudDialogVisible = false },
+            onSaveAndLogin = onSaveCookieCloudAndLogin,
+            onClear = {
+                onClearCookieCloud()
+                isCookieCloudDialogVisible = false
+            },
+        )
+    }
 }
+
+@Composable
+private fun CookieCloudSettingsDialog(
+    initialServerUrl: String,
+    initialUserKey: String,
+    initialPassword: String,
+    initialCryptoType: CookieCloudCryptoType,
+    isConfigured: Boolean,
+    isSyncing: Boolean,
+    errorText: String?,
+    onDismiss: () -> Unit,
+    onSaveAndLogin: (
+        serverUrl: String,
+        userKey: String,
+        password: String,
+        cryptoType: CookieCloudCryptoType,
+    ) -> Unit,
+    onClear: () -> Unit,
+) {
+    val focusManager = LocalFocusManager.current
+    var serverUrl by remember { mutableStateOf(initialServerUrl) }
+    var userKey by remember { mutableStateOf(initialUserKey) }
+    var password by remember { mutableStateOf(initialPassword) }
+    var cryptoType by remember { mutableStateOf(initialCryptoType) }
+    var isPasswordVisible by remember { mutableStateOf(false) }
+    var hasDraftChanges by remember { mutableStateOf(false) }
+
+    LaunchedEffect(
+        initialServerUrl,
+        initialUserKey,
+        initialPassword,
+        initialCryptoType,
+    ) {
+        if (!hasDraftChanges && !isSyncing) {
+            serverUrl = initialServerUrl
+            userKey = initialUserKey
+            password = initialPassword
+            cryptoType = initialCryptoType
+        }
+    }
+
+    val trimmedServerUrl = serverUrl.trim()
+    val serverUrlErrorRes = when {
+        trimmedServerUrl.isEmpty() -> R.string.cookie_cloud_server_url_required
+        !isValidCookieCloudServerUrl(trimmedServerUrl) ->
+            R.string.cookie_cloud_server_url_https_required
+
+        else -> null
+    }
+    val userKeyErrorRes = when {
+        userKey.isBlank() -> R.string.cookie_cloud_user_key_required
+        !isValidCookieCloudUserKey(userKey) -> R.string.cookie_cloud_user_key_invalid
+        else -> null
+    }
+    val passwordErrorRes = when {
+        password.isEmpty() -> R.string.cookie_cloud_password_required
+        !isValidCookieCloudPassword(password) -> R.string.cookie_cloud_password_invalid
+        else -> null
+    }
+    val serverUrlError = serverUrlErrorRes?.let { stringResource(it) }
+    val userKeyError = userKeyErrorRes?.let { stringResource(it) }
+    val passwordError = passwordErrorRes?.let { stringResource(it) }
+    val canSave = serverUrlErrorRes == null &&
+        userKeyErrorRes == null &&
+        passwordErrorRes == null &&
+        !isSyncing
+
+    fun clearSensitiveDraftAndDismiss() {
+        password = ""
+        isPasswordVisible = false
+        onDismiss()
+    }
+
+    fun saveAndLogin() {
+        focusManager.clearFocus()
+        onSaveAndLogin(
+            trimmedServerUrl,
+            userKey.trim(),
+            password,
+            cryptoType,
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = {
+            if (!isSyncing) {
+                clearSensitiveDraftAndDismiss()
+            }
+        },
+        modifier = Modifier.imePadding(),
+        title = {
+            Text(stringResource(R.string.cookie_cloud_dialog_title))
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(MaterialTheme.spacing.large),
+            ) {
+                Text(
+                    text = stringResource(R.string.cookie_cloud_dialog_description),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+
+                ErrorMessage(errorText = errorText)
+
+                OutlinedTextField(
+                    value = serverUrl,
+                    onValueChange = {
+                        serverUrl = it
+                        hasDraftChanges = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncing,
+                    singleLine = true,
+                    isError = serverUrlError != null,
+                    label = { Text(stringResource(R.string.cookie_cloud_server_url)) },
+                    supportingText = serverUrlError?.let { message ->
+                        { Text(message) }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Uri,
+                        imeAction = ImeAction.Next,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocusDown() },
+                    ),
+                )
+
+                OutlinedTextField(
+                    value = userKey,
+                    onValueChange = {
+                        userKey = it
+                        hasDraftChanges = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncing,
+                    singleLine = true,
+                    isError = userKeyError != null,
+                    label = { Text(stringResource(R.string.cookie_cloud_user_key)) },
+                    supportingText = userKeyError?.let { message ->
+                        { Text(message) }
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Ascii,
+                        imeAction = ImeAction.Next,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onNext = { focusManager.moveFocusDown() },
+                    ),
+                )
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        hasDraftChanges = true
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !isSyncing,
+                    singleLine = true,
+                    isError = passwordError != null,
+                    label = { Text(stringResource(R.string.cookie_cloud_password)) },
+                    supportingText = passwordError?.let { message ->
+                        { Text(message) }
+                    },
+                    trailingIcon = {
+                        val descriptionRes = if (isPasswordVisible) {
+                            R.string.password_visibility_hide
+                        } else {
+                            R.string.password_visibility_show
+                        }
+                        IconButton(
+                            onClick = { isPasswordVisible = !isPasswordVisible },
+                            enabled = !isSyncing,
+                        ) {
+                            Icon(
+                                imageVector = if (isPasswordVisible) {
+                                    Icons.Outlined.VisibilityOff
+                                } else {
+                                    Icons.Outlined.Visibility
+                                },
+                                contentDescription = stringResource(descriptionRes),
+                            )
+                        }
+                    },
+                    visualTransformation = if (isPasswordVisible) {
+                        VisualTransformation.None
+                    } else {
+                        PasswordVisualTransformation()
+                    },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Password,
+                        imeAction = ImeAction.Done,
+                    ),
+                    keyboardActions = KeyboardActions(
+                        onDone = {
+                            if (canSave) {
+                                saveAndLogin()
+                            }
+                        },
+                    ),
+                )
+
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = stringResource(R.string.cookie_cloud_crypto_type),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        FilterChip(
+                            selected = cryptoType == CookieCloudCryptoType.LEGACY,
+                            onClick = {
+                                cryptoType = CookieCloudCryptoType.LEGACY
+                                hasDraftChanges = true
+                            },
+                            enabled = !isSyncing,
+                            label = {
+                                Text(stringResource(R.string.cookie_cloud_crypto_legacy))
+                            },
+                        )
+                        FilterChip(
+                            selected = cryptoType ==
+                                CookieCloudCryptoType.AES_128_CBC_FIXED,
+                            onClick = {
+                                cryptoType = CookieCloudCryptoType.AES_128_CBC_FIXED
+                                hasDraftChanges = true
+                            },
+                            enabled = !isSyncing,
+                            label = {
+                                Text(stringResource(R.string.cookie_cloud_crypto_aes_fixed))
+                            },
+                        )
+                    }
+                    Text(
+                        text = stringResource(R.string.cookie_cloud_crypto_description),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = ::saveAndLogin,
+                enabled = canSave,
+            ) {
+                if (isSyncing) {
+                    LoadingIndicator(
+                        modifier = Modifier.size(18.dp),
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.62f),
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(stringResource(R.string.cookie_cloud_syncing))
+                } else {
+                    Text(stringResource(R.string.cookie_cloud_save_and_login))
+                }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (isConfigured) {
+                    TextButton(
+                        onClick = {
+                            password = ""
+                            isPasswordVisible = false
+                            onClear()
+                        },
+                        enabled = !isSyncing,
+                    ) {
+                        Text(stringResource(R.string.cookie_cloud_clear))
+                    }
+                }
+                TextButton(
+                    onClick = ::clearSensitiveDraftAndDismiss,
+                    enabled = !isSyncing,
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+            }
+        },
+    )
+}
+
+private fun isValidCookieCloudServerUrl(value: String): Boolean =
+    CookieCloudConfig.normalizedOrNull(
+        serverUrl = value,
+        userKey = "validation-key",
+        password = "validation-password",
+        cryptoType = CookieCloudCryptoType.LEGACY,
+    ) != null
+
+private fun isValidCookieCloudUserKey(value: String): Boolean =
+    CookieCloudConfig.normalizedOrNull(
+        serverUrl = "https://cookiecloud.invalid",
+        userKey = value,
+        password = "validation-password",
+        cryptoType = CookieCloudCryptoType.LEGACY,
+    ) != null
+
+private fun isValidCookieCloudPassword(value: String): Boolean =
+    CookieCloudConfig.normalizedOrNull(
+        serverUrl = "https://cookiecloud.invalid",
+        userKey = "validation-key",
+        password = value,
+        cryptoType = CookieCloudCryptoType.LEGACY,
+    ) != null
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

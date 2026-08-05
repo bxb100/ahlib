@@ -67,6 +67,47 @@ internal class EncryptedCookieJar(
         }
     }
 
+    override fun saveAuthenticationTokenIfCurrent(
+        expectedToken: String?,
+        token: String,
+        retentionDays: Int,
+    ): AuthenticationTokenUpdateResult {
+        val cookie = createAuthenticationCookie(token, retentionDays)
+            ?: return AuthenticationTokenUpdateResult.STORAGE_FAILED
+        return synchronized(lock) {
+            ensureLoadedLocked()
+            val now = System.currentTimeMillis()
+            val persistentRemoved = removeExpiredLocked(now)
+            val currentToken = cookies.firstOrNull { storedCookie ->
+                storedCookie.name == cookie.name &&
+                    storedCookie.domain == cookie.domain &&
+                    storedCookie.path == cookie.path
+            }?.value
+            if (currentToken != expectedToken) {
+                if (persistentRemoved) {
+                    persistLocked()
+                }
+                return@synchronized AuthenticationTokenUpdateResult.TOKEN_CHANGED
+            }
+
+            val persistentBefore = cookies.filter(StoredCookie::persistent)
+            updateCookiesLocked(listOf(cookie), now)
+            val persistentAfter = cookies.filter(StoredCookie::persistent)
+            val saved = if (
+                persistentRemoved || persistentAfter.toSet() != persistentBefore.toSet()
+            ) {
+                persistLocked()
+            } else {
+                true
+            }
+            if (saved) {
+                AuthenticationTokenUpdateResult.SAVED
+            } else {
+                AuthenticationTokenUpdateResult.STORAGE_FAILED
+            }
+        }
+    }
+
     override fun clear() {
         synchronized(lock) {
             loaded = true

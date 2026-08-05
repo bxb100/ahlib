@@ -135,6 +135,15 @@ fun ReservationApp(
                 },
                 onRefreshCaptcha = viewModel::refreshLoginCaptcha,
                 onLogin = viewModel::submitLogin,
+                cookieCloudServerUrl = state.login.cookieCloud.serverUrl,
+                cookieCloudUserKey = state.login.cookieCloud.userKey,
+                cookieCloudPassword = state.login.cookieCloud.password,
+                cookieCloudCryptoType = state.login.cookieCloud.cryptoType,
+                isCookieCloudConfigured = state.login.cookieCloud.isConfigured,
+                isCookieCloudSyncing = state.login.cookieCloud.isSyncing,
+                cookieCloudErrorText = state.login.cookieCloud.error?.resolve(),
+                onSaveCookieCloudAndLogin = viewModel::saveCookieCloudAndLogin,
+                onClearCookieCloud = viewModel::clearCookieCloudConfig,
                 modifier = Modifier.fillMaxSize(),
             )
 

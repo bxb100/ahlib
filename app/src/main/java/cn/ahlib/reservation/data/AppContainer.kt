@@ -6,6 +6,7 @@ import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import okhttp3.CookieJar
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -28,6 +29,19 @@ class AppContainer(
             nativeClient = JniReaderQrNativeClient(appContext, gson),
         )
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
+        val cookieCloudClient = OkHttpClient.Builder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .followSslRedirects(false)
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+        val cookieCloudSessionManager = CookieCloudSessionManager(
+            configStore = EncryptedCookieCloudConfigStore(appContext),
+            client = cookieCloudClient,
+            cookieJar = cookieJar,
+            gson = gson,
+        )
         val okHttpClient = OkHttpClient.Builder()
             .cookieJar(cookieJar)
             .addInterceptor(CacheBustingInterceptor())
@@ -46,6 +60,7 @@ class AppContainer(
             api = api,
             passwordCipher = PasswordCipher(),
             cookieJar = cookieJar,
+            cookieCloudSessionManager = cookieCloudSessionManager,
             gson = gson,
         )
     }

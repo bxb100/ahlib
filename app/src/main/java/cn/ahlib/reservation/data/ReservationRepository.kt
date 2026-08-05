@@ -14,6 +14,7 @@ class ReservationRepository internal constructor(
     private val api: ReservationApi,
     private val passwordCipher: PasswordCipher,
     private val cookieJar: ClearableCookieJar,
+    private val cookieCloudSessionManager: CookieCloudSessionManager,
     gson: Gson,
 ) {
     private val userInfoResultMapper = UserInfoResultMapper(gson)
@@ -35,6 +36,7 @@ class ReservationRepository internal constructor(
         return safeCall(
             call = { api.getCaptcha(width, height, lineSpacing) },
             transform = ApiResultMapper::required,
+            allowSessionRecovery = false,
         )
     }
 
@@ -70,12 +72,15 @@ class ReservationRepository internal constructor(
                 )
             },
             transform = ApiResultMapper::required,
+            allowSessionRecovery = false,
         )
         if (result is ApiResult.Success) {
             val tokenSaved = result.data.token
                 ?.let { token ->
                     withContext(Dispatchers.IO) {
-                        cookieJar.saveAuthenticationToken(token, loginTime)
+                        synchronized(cookieJar) {
+                            cookieJar.saveAuthenticationToken(token, loginTime)
+                        }
                     }
                 }
                 ?: false
@@ -87,6 +92,7 @@ class ReservationRepository internal constructor(
                     ),
                 )
             }
+            clearCaches()
         }
         return result
     }
@@ -95,6 +101,7 @@ class ReservationRepository internal constructor(
         safeCall(
             call = api::isLoggedIn,
             transform = ApiResultMapper::required,
+            recoverSuccessfulResult = { isLoggedIn -> !isLoggedIn },
         )
 
     suspend fun logout(): ApiResult<Unit> =
@@ -102,6 +109,7 @@ class ReservationRepository internal constructor(
             safeCall(
                 call = api::logout,
                 transform = ApiResultMapper::unit,
+                allowSessionRecovery = false,
             )
         } finally {
             clearLocalSession()
@@ -109,7 +117,9 @@ class ReservationRepository internal constructor(
 
     internal fun clearLocalSession() {
         clearCaches()
-        cookieJar.clear()
+        synchronized(cookieJar) {
+            cookieJar.clear()
+        }
     }
 
     internal fun webViewCookies(url: String): List<String> {
@@ -133,6 +143,23 @@ class ReservationRepository internal constructor(
         cookieJar.loadForRequest(AUTHENTICATION_COOKIE_URL.toHttpUrl())
             .firstOrNull { cookie -> cookie.name == AUTHENTICATION_COOKIE_NAME }
             ?.let { cookie -> "${cookie.name}=${cookie.value}" }
+
+    fun cookieCloudConfig(): CookieCloudConfig? =
+        cookieCloudSessionManager.loadConfig()
+
+    fun saveCookieCloudConfig(config: CookieCloudConfig): Boolean =
+        cookieCloudSessionManager.saveConfig(config)
+
+    fun clearCookieCloudConfig() {
+        cookieCloudSessionManager.clearConfig()
+    }
+
+    suspend fun syncCookieCloudSession(): CookieCloudSyncResult =
+        cookieCloudSessionManager.syncNow().also { result ->
+            if (result is CookieCloudSyncResult.Success) {
+                clearCaches()
+            }
+        }
 
     suspend fun sendMessageCode(
         mobile: String,
@@ -172,6 +199,7 @@ class ReservationRepository internal constructor(
         safeCall(
             call = api::getUserInfo,
             transform = userInfoResultMapper::map,
+            recoverSuccessfulResult = { profile -> profile == null },
         )
 
     suspend fun getWechatConfig(pageUrl: String): ApiResult<WechatConfig> {
@@ -391,7 +419,34 @@ class ReservationRepository internal constructor(
     private suspend fun <Envelope, Result> safeCall(
         call: suspend () -> Envelope,
         transform: (Envelope) -> ApiResult<Result>,
+        allowSessionRecovery: Boolean = true,
+        recoverSuccessfulResult: (Result) -> Boolean = { false },
     ): ApiResult<Result> = withContext(Dispatchers.IO) {
+        val failedToken = if (allowSessionRecovery) {
+            authenticationToken()
+        } else {
+            null
+        }
+        val initialResult = performCall(call, transform)
+        val shouldRecover = when (initialResult) {
+            is ApiResult.Success -> recoverSuccessfulResult(initialResult.data)
+            is ApiResult.Failure -> initialResult.exception.isSessionExpired
+        }
+        if (!allowSessionRecovery || !shouldRecover) {
+            return@withContext initialResult
+        }
+        val recoveryResult = cookieCloudSessionManager.recoverIfConfigured(failedToken)
+        if (recoveryResult !is CookieCloudSyncResult.Success) {
+            return@withContext initialResult
+        }
+        clearCaches()
+        performCall(call, transform)
+    }
+
+    private suspend fun <Envelope, Result> performCall(
+        call: suspend () -> Envelope,
+        transform: (Envelope) -> ApiResult<Result>,
+    ): ApiResult<Result> =
         try {
             transform(call())
         } catch (exception: CancellationException) {
@@ -436,7 +491,17 @@ class ReservationRepository internal constructor(
                 ),
             )
         }
-    }
+
+    private fun authenticationToken(): String? =
+        try {
+            cookieJar.loadForRequest(AUTHENTICATION_COOKIE_URL.toHttpUrl())
+                .firstOrNull { cookie -> cookie.name == AUTHENTICATION_COOKIE_NAME }
+                ?.value
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (_: Exception) {
+            null
+        }
 
     private fun validationFailure(message: String): ApiResult.Failure =
         ApiResult.Failure(
