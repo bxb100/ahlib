@@ -20,6 +20,7 @@ class MainActivity : ComponentActivity() {
                     repository = application.appContainer.repository,
                     readerQrCodeRepository =
                         application.appContainer.readerQrCodeRepository,
+                    opacRepository = application.appContainer.opacRepository,
                     locationProvider = application.locationProvider,
                     shouldUseMockLocation =
                         application.automationManager::shouldUseMockLocation,

@@ -17,6 +17,7 @@ class AppContainer(
 ) {
     val repository: ReservationRepository
     val readerQrCodeRepository: ReaderQrCodeRepository
+    val opacRepository: OpacRepository
 
     init {
         val appContext = context.applicationContext
@@ -25,9 +26,17 @@ class AppContainer(
             clearDeprecatedReaderQrCache(appContext)
         }
         val gson = GsonFactory.create()
-        readerQrCodeRepository = ReaderQrCodeRepository(
-            nativeClient = JniReaderQrNativeClient(appContext, gson),
-        )
+        val nativeClient = JniReaderQrNativeClient(appContext, gson)
+        readerQrCodeRepository = ReaderQrCodeRepository(nativeClient)
+        val opacHttpClient = OkHttpClient.Builder()
+            .cookieJar(CookieJar.NO_COOKIES)
+            .followRedirects(false)
+            .followSslRedirects(false)
+            .connectTimeout(CONNECT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .readTimeout(READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .writeTimeout(WRITE_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+            .build()
+        opacRepository = OpacRepository(OkHttpOpacClient(opacHttpClient))
         val cookieJar = EncryptedCookieJar(context.applicationContext, gson)
         val cookieCloudClient = OkHttpClient.Builder()
             .cookieJar(CookieJar.NO_COOKIES)
