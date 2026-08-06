@@ -4,8 +4,10 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -13,9 +15,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.EventNote
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.LocalLibrary
 import androidx.compose.material.icons.outlined.MeetingRoom
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Public
@@ -48,8 +55,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -71,6 +82,10 @@ import cn.ahlib.reservation.update.AppUpdateManager
 import cn.ahlib.reservation.update.UpdateNotice
 import java.text.DateFormat
 import java.util.Date
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 @Composable
 fun ReservationApp(
@@ -322,19 +337,73 @@ private fun AuthenticatedContent(
         mutableStateOf(ProfilePage.PROFILE)
     }
     var fabMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    val opacListState = rememberLazyListState()
+    val coroutineScope = rememberCoroutineScope()
+    val opacScrollToTopController = remember { OpacScrollToTopController() }
+    var isOpacScrollToTopInProgress by remember { mutableStateOf(false) }
+    val opacScrollThresholdTracker = rememberSaveable(
+        saver = OpacScrollThresholdTracker.Saver,
+    ) {
+        OpacScrollThresholdTracker()
+    }
+    var hasScrolledBeyondOpacViewport by remember(opacScrollThresholdTracker) {
+        mutableStateOf(opacScrollThresholdTracker.isBeyondViewport)
+    }
+    val shouldTransformOpacFab = state.shouldTransformOpacFab(
+        hasScrolledBeyondViewport = hasScrolledBeyondOpacViewport,
+        isScrollToTopInProgress = isOpacScrollToTopInProgress,
+    )
     var showReaderQrCodeViewer by rememberSaveable { mutableStateOf(false) }
+    var scannerReturnTab by rememberSaveable {
+        mutableStateOf(AuthenticatedTab.ROOMS)
+    }
     LaunchedEffect(state.selectedTab) {
         fabMenuExpanded = false
+        if (state.selectedTab != AuthenticatedTab.OPAC) {
+            opacScrollToTopController.cancel()
+        }
+        if (state.selectedTab in AUTHENTICATED_NAVIGATION_TABS) {
+            scannerReturnTab = state.selectedTab
+        }
     }
     LaunchedEffect(state.readerQrCode.content) {
         if (state.readerQrCode.content == null) {
             showReaderQrCodeViewer = false
         }
     }
+    LaunchedEffect(shouldTransformOpacFab) {
+        if (shouldTransformOpacFab) {
+            fabMenuExpanded = false
+        }
+    }
+    LaunchedEffect(
+        state.selectedTab,
+        state.opacSearch.books.isNotEmpty(),
+        opacListState,
+        opacScrollThresholdTracker,
+    ) {
+        if (
+            state.selectedTab == AuthenticatedTab.OPAC &&
+            state.opacSearch.books.isNotEmpty()
+        ) {
+            snapshotFlow {
+                opacListState.layoutInfo.totalItemsCount > 0 &&
+                    !opacListState.canScrollBackward
+            }.collect { isAtTop ->
+                if (isAtTop) {
+                    opacScrollThresholdTracker.reset()
+                        ?.let { hasScrolledBeyondOpacViewport = it }
+                }
+            }
+        }
+    }
     LaunchedEffect(state.reservationList.reservations) {
         if (automationSettings.cancellationEnabled) {
             automationManager.refreshCancellationSchedule()
         }
+    }
+    BackHandler(enabled = state.selectedTab == AuthenticatedTab.SCANNER) {
+        viewModel.selectTab(scannerReturnTab)
     }
 
     when (profilePage) {
@@ -474,6 +543,18 @@ private fun AuthenticatedContent(
         contentWindowInsets = WindowInsets.safeDrawing,
         topBar = {
             CenterAlignedTopAppBar(
+                navigationIcon = {
+                    if (state.selectedTab == AuthenticatedTab.SCANNER) {
+                        IconButton(
+                            onClick = { viewModel.selectTab(scannerReturnTab) },
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
+                                contentDescription = stringResource(R.string.navigate_back),
+                            )
+                        }
+                    }
+                },
                 title = {
                     Text(
                         text = stringResource(state.selectedTab.titleResource()),
@@ -514,9 +595,11 @@ private fun AuthenticatedContent(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer,
                 tonalElevation = 0.dp,
             ) {
-                AuthenticatedTab.entries.forEach { tab ->
+                AUTHENTICATED_NAVIGATION_TABS.forEach { tab ->
                     NavigationBarItem(
-                        selected = state.selectedTab == tab,
+                        selected = state.selectedTab == tab ||
+                            state.selectedTab == AuthenticatedTab.SCANNER &&
+                            scannerReturnTab == tab,
                         onClick = { viewModel.selectTab(tab) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -541,25 +624,36 @@ private fun AuthenticatedContent(
         floatingActionButton = {
             if (state.selectedTab != AuthenticatedTab.SCANNER) {
                 FloatingActionButtonMenu(
-                    expanded = fabMenuExpanded,
+                    expanded = fabMenuExpanded && !shouldTransformOpacFab,
                     button = {
                         ToggleFloatingActionButton(
-                            checked = fabMenuExpanded,
-                            onCheckedChange = { fabMenuExpanded = it },
-                        ) {
-                            Icon(
-                                imageVector = if (fabMenuExpanded) {
-                                    Icons.Outlined.Close
+                            checked = fabMenuExpanded && !shouldTransformOpacFab,
+                            onCheckedChange = { checked ->
+                                if (shouldTransformOpacFab) {
+                                    opacScrollToTopController.launch(
+                                        scope = coroutineScope,
+                                        onRunningChanged = {
+                                            isOpacScrollToTopInProgress = it
+                                        },
+                                    ) {
+                                        opacListState.animateOpacScrollToTop()
+                                        if (!opacListState.canScrollBackward) {
+                                            opacScrollThresholdTracker.reset()
+                                                ?.let {
+                                                    hasScrolledBeyondOpacViewport = it
+                                                }
+                                        }
+                                    }
                                 } else {
-                                    Icons.Outlined.QrCodeScanner
-                                },
-                                contentDescription = stringResource(
-                                    if (fabMenuExpanded) {
-                                        R.string.close_quick_actions
-                                    } else {
-                                        R.string.open_quick_actions
-                                    },
-                                ),
+                                    fabMenuExpanded = checked
+                                }
+                            },
+                        ) {
+                            QuickActionFabIcon(
+                                state = state,
+                                hasScrolledBeyondViewport = hasScrolledBeyondOpacViewport,
+                                isScrollToTopInProgress = isOpacScrollToTopInProgress,
+                                fabMenuExpanded = fabMenuExpanded,
                             )
                         }
                     },
@@ -567,6 +661,9 @@ private fun AuthenticatedContent(
                     FloatingActionButtonMenuItem(
                         onClick = {
                             fabMenuExpanded = false
+                            if (state.selectedTab in AUTHENTICATED_NAVIGATION_TABS) {
+                                scannerReturnTab = state.selectedTab
+                            }
                             viewModel.selectTab(AuthenticatedTab.SCANNER)
                         },
                         icon = {
@@ -680,6 +777,40 @@ private fun AuthenticatedContent(
                         ).show()
                     }
                 },
+                modifier = contentModifier,
+            )
+
+            AuthenticatedTab.OPAC -> OpacSearchScreen(
+                books = state.opacSearch.books,
+                searchQuery = state.opacSearch.searchQuery,
+                total = state.opacSearch.total,
+                hasSearched = state.opacSearch.hasSearched,
+                isLoading = state.opacSearch.isLoading,
+                isLoadingMore = state.opacSearch.isLoadingMore,
+                canLoadMore = state.opacSearch.canLoadMore,
+                errorText = state.opacSearch.error?.resolve(),
+                onSearchQueryChange = viewModel::updateOpacSearchQuery,
+                onSearch = {
+                    opacScrollToTopController.cancel()
+                    opacScrollThresholdTracker.reset()
+                        ?.let { hasScrolledBeyondOpacViewport = it }
+                    opacListState.requestScrollToItem(0)
+                    viewModel.submitOpacSearch()
+                },
+                onRetry = viewModel::retryOpacSearch,
+                onLoadMore = viewModel::loadNextOpacPage,
+                onScrollConsumed = { consumedY ->
+                    opacScrollThresholdTracker.onScrollConsumed(
+                        consumedY = consumedY,
+                        canScrollBackward = opacListState.canScrollBackward,
+                    )?.let { hasScrolledBeyondOpacViewport = it }
+                },
+                onViewportHeightChanged = { viewportHeightPx ->
+                    opacScrollThresholdTracker
+                        .updateViewportHeight(viewportHeightPx)
+                        ?.let { hasScrolledBeyondOpacViewport = it }
+                },
+                listState = opacListState,
                 modifier = contentModifier,
             )
 
@@ -889,6 +1020,7 @@ private fun UiText.resolve(): String = when (this) {
 
 private fun AuthenticatedTab.titleResource(): Int = when (this) {
     AuthenticatedTab.ROOMS -> R.string.nav_rooms
+    AuthenticatedTab.OPAC -> R.string.nav_opac_search
     AuthenticatedTab.RESERVATIONS -> R.string.nav_reservations
     AuthenticatedTab.SCANNER -> R.string.nav_scanner
     AuthenticatedTab.PROFILE -> R.string.nav_profile
@@ -896,9 +1028,181 @@ private fun AuthenticatedTab.titleResource(): Int = when (this) {
 
 private fun AuthenticatedTab.icon(): ImageVector = when (this) {
     AuthenticatedTab.ROOMS -> Icons.Outlined.MeetingRoom
+    AuthenticatedTab.OPAC -> Icons.Outlined.LocalLibrary
     AuthenticatedTab.RESERVATIONS -> Icons.AutoMirrored.Outlined.EventNote
     AuthenticatedTab.SCANNER -> Icons.Outlined.QrCodeScanner
     AuthenticatedTab.PROFILE -> Icons.Outlined.Person
+}
+
+internal val AUTHENTICATED_NAVIGATION_TABS = listOf(
+    AuthenticatedTab.ROOMS,
+    AuthenticatedTab.OPAC,
+    AuthenticatedTab.RESERVATIONS,
+    AuthenticatedTab.PROFILE,
+)
+
+internal fun ReservationUiState.shouldTransformOpacFab(
+    hasScrolledBeyondViewport: Boolean,
+    isScrollToTopInProgress: Boolean = false,
+): Boolean =
+    selectedTab == AuthenticatedTab.OPAC &&
+        opacSearch.books.isNotEmpty() &&
+        (hasScrolledBeyondViewport || isScrollToTopInProgress)
+
+internal fun calculateOpacScrollToTopAnimationStartIndex(
+    firstVisibleItemIndex: Int,
+    visibleItemCount: Int,
+): Int? {
+    val animatedItemCount = visibleItemCount.coerceAtLeast(1)
+    return animatedItemCount.takeIf { firstVisibleItemIndex > it }
+}
+
+internal suspend fun LazyListState.animateOpacScrollToTop() {
+    calculateOpacScrollToTopAnimationStartIndex(
+        firstVisibleItemIndex = firstVisibleItemIndex,
+        visibleItemCount = layoutInfo.visibleItemsInfo.size,
+    )?.let { animationStartIndex ->
+        scrollToItem(animationStartIndex)
+    }
+    animateScrollToItem(0)
+}
+
+internal class OpacScrollToTopController {
+    private var activeJob: Job? = null
+
+    fun launch(
+        scope: CoroutineScope,
+        onRunningChanged: (Boolean) -> Unit = {},
+        block: suspend () -> Unit,
+    ): Boolean {
+        if (activeJob?.isActive == true) {
+            return false
+        }
+        lateinit var job: Job
+        job = scope.launch(start = CoroutineStart.LAZY) {
+            try {
+                onRunningChanged(true)
+                block()
+            } finally {
+                if (activeJob === job) {
+                    activeJob = null
+                    onRunningChanged(false)
+                }
+            }
+        }
+        activeJob = job
+        job.start()
+        return true
+    }
+
+    fun cancel() {
+        activeJob?.cancel()
+    }
+}
+
+internal class OpacScrollThresholdTracker(
+    initialScrollDistancePx: Double = 0.0,
+    initialViewportHeightPx: Int = 0,
+) {
+    var scrollDistancePx: Double = initialScrollDistancePx.coerceAtLeast(0.0)
+        private set
+    var viewportHeightPx: Int = initialViewportHeightPx.coerceAtLeast(0)
+        private set
+    var isBeyondViewport: Boolean = calculateIsBeyondViewport()
+        private set
+
+    fun onScrollConsumed(
+        consumedY: Float,
+        canScrollBackward: Boolean,
+    ): Boolean? {
+        scrollDistancePx = if (canScrollBackward || consumedY < 0f) {
+            (scrollDistancePx - consumedY.toDouble()).coerceAtLeast(0.0)
+        } else {
+            0.0
+        }
+        return updateThreshold()
+    }
+
+    fun updateViewportHeight(viewportHeightPx: Int): Boolean? {
+        this.viewportHeightPx = viewportHeightPx.coerceAtLeast(0)
+        return updateThreshold()
+    }
+
+    fun reset(): Boolean? {
+        scrollDistancePx = 0.0
+        return updateThreshold()
+    }
+
+    private fun updateThreshold(): Boolean? {
+        val nextValue = calculateIsBeyondViewport()
+        if (nextValue == isBeyondViewport) {
+            return null
+        }
+        isBeyondViewport = nextValue
+        return nextValue
+    }
+
+    private fun calculateIsBeyondViewport(): Boolean =
+        viewportHeightPx > 0 && scrollDistancePx > viewportHeightPx
+
+    companion object {
+        val Saver: Saver<OpacScrollThresholdTracker, *> = listSaver(
+            save = { tracker ->
+                listOf(
+                    tracker.scrollDistancePx,
+                    tracker.viewportHeightPx,
+                )
+            },
+            restore = { saved ->
+                OpacScrollThresholdTracker(
+                    initialScrollDistancePx = saved[0] as Double,
+                    initialViewportHeightPx = saved[1] as Int,
+                )
+            },
+        )
+    }
+}
+
+@Composable
+internal fun QuickActionFabIcon(
+    state: ReservationUiState,
+    hasScrolledBeyondViewport: Boolean,
+    isScrollToTopInProgress: Boolean = false,
+    fabMenuExpanded: Boolean,
+) {
+    val shouldTransformOpacFab = state.shouldTransformOpacFab(
+        hasScrolledBeyondViewport = hasScrolledBeyondViewport,
+        isScrollToTopInProgress = isScrollToTopInProgress,
+    )
+    AnimatedContent(
+        targetState = when {
+            shouldTransformOpacFab -> QuickActionFabState.SCROLL_TO_TOP
+            fabMenuExpanded -> QuickActionFabState.CLOSE_MENU
+            else -> QuickActionFabState.OPEN_MENU
+        },
+        label = "quick-action-fab-icon",
+    ) { fabState ->
+        Icon(
+            imageVector = when (fabState) {
+                QuickActionFabState.OPEN_MENU -> Icons.Outlined.QrCodeScanner
+                QuickActionFabState.CLOSE_MENU -> Icons.Outlined.Close
+                QuickActionFabState.SCROLL_TO_TOP -> Icons.Outlined.KeyboardArrowUp
+            },
+            contentDescription = stringResource(
+                when (fabState) {
+                    QuickActionFabState.OPEN_MENU -> R.string.open_quick_actions
+                    QuickActionFabState.CLOSE_MENU -> R.string.close_quick_actions
+                    QuickActionFabState.SCROLL_TO_TOP -> R.string.scroll_to_top
+                },
+            ),
+        )
+    }
+}
+
+private enum class QuickActionFabState {
+    OPEN_MENU,
+    CLOSE_MENU,
+    SCROLL_TO_TOP,
 }
 
 private fun android.content.Context.hasLocationPermission(): Boolean =

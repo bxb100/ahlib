@@ -2,6 +2,7 @@ package cn.ahlib.reservation.ui
 
 import android.util.Log
 import androidx.annotation.StringRes
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -19,6 +20,10 @@ import cn.ahlib.reservation.data.CookieCloudCryptoType
 import cn.ahlib.reservation.data.CookieCloudFailureReason
 import cn.ahlib.reservation.data.CookieCloudSyncResult
 import cn.ahlib.reservation.data.CreateReservationRequest
+import cn.ahlib.reservation.data.OpacBook
+import cn.ahlib.reservation.data.OpacRepository
+import cn.ahlib.reservation.data.OpacSearchFailure
+import cn.ahlib.reservation.data.OpacSearchResult
 import cn.ahlib.reservation.data.ReaderQrCodeFailure
 import cn.ahlib.reservation.data.ReaderQrCodeRepository
 import cn.ahlib.reservation.data.ReaderQrCodeResult
@@ -44,6 +49,8 @@ import java.time.LocalDate
 import java.time.LocalTime
 import java.util.concurrent.atomic.AtomicLong
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -79,6 +86,7 @@ enum class AppStage {
 
 enum class AuthenticatedTab {
     ROOMS,
+    OPAC,
     RESERVATIONS,
     SCANNER,
     PROFILE,
@@ -244,6 +252,32 @@ data class ReservationListUiState(
         get() = !isLoading && !isLoadingMore && pageNum > 0 && pageNum < totalPages
 }
 
+@Immutable
+data class OpacSearchUiState(
+    val searchQuery: String = "",
+    val appliedSearchQuery: String = "",
+    val books: List<OpacBook> = emptyList(),
+    val page: Int = 0,
+    val totalPages: Int = 0,
+    val total: Int = 0,
+    val isFirstPage: Boolean = true,
+    val isLastPage: Boolean = true,
+    val failedPage: Int? = null,
+    val hasSearched: Boolean = false,
+    val isLoading: Boolean = false,
+    val isLoadingMore: Boolean = false,
+    val error: UiText? = null,
+) {
+    val canLoadMore: Boolean
+        get() = hasSearched &&
+            !isLoading &&
+            !isLoadingMore &&
+            error == null &&
+            page > 0 &&
+            page < totalPages &&
+            !isLastPage
+}
+
 enum class ScannerPhase {
     SCANNING,
     LOADING,
@@ -295,6 +329,7 @@ data class ReservationUiState(
     val roomDetail: RoomDetailUiState = RoomDetailUiState(),
     val booking: BookingUiState = BookingUiState(),
     val reservationList: ReservationListUiState = ReservationListUiState(),
+    val opacSearch: OpacSearchUiState = OpacSearchUiState(),
     val scanner: ScannerUiState = ScannerUiState(),
     val readerQrCode: ReaderQrCodeUiState = ReaderQrCodeUiState(),
     val message: UiMessage? = null,
@@ -383,6 +418,7 @@ private fun AppointmentRecord.reservationStartTimeForSorting(): LocalTime? {
 class ReservationViewModel(
     private val repository: ReservationRepository,
     private val readerQrCodeRepository: ReaderQrCodeRepository,
+    private val opacRepository: OpacRepository,
     private val locationProvider: DeviceLocationProvider,
     private val shouldUseMockLocation: () -> Boolean,
     private val queueCalendarReminder: suspend (
@@ -391,6 +427,9 @@ class ReservationViewModel(
         reservationDateTime: String,
         createdAtMillis: Long,
     ) -> Unit,
+    private val searchOpac: suspend (query: String, page: Int) -> OpacSearchResult =
+        opacRepository::search,
+    private val opacMergeDispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(ReservationUiState())
     val uiState: StateFlow<ReservationUiState> = _uiState.asStateFlow()
@@ -400,6 +439,7 @@ class ReservationViewModel(
     private var roomRequestId = 0L
     private var detailRequestId = 0L
     private var reservationRequestId = 0L
+    private var opacRequestId = 0L
     private var scannerRequestId = 0L
     private var readerQrRequestId = 0L
     private var cookieCloudConfigRevision = 0L
@@ -416,6 +456,7 @@ class ReservationViewModel(
     private var roomDetailJob: Job? = null
     private var bookingJob: Job? = null
     private var reservationsJob: Job? = null
+    private var opacJob: Job? = null
     private val cancellationJobs = mutableMapOf<String, Job>()
     private var scannerJob: Job? = null
     private var readerQrCodeJob: Job? = null
@@ -1170,9 +1211,195 @@ class ReservationViewModel(
                 }
             }
 
+            AuthenticatedTab.OPAC,
             AuthenticatedTab.SCANNER,
             AuthenticatedTab.PROFILE,
             -> Unit
+        }
+    }
+
+    fun updateOpacSearchQuery(value: String) {
+        _uiState.update { state ->
+            state.copy(
+                opacSearch = state.opacSearch.copy(
+                    searchQuery = value.take(OPAC_MAX_QUERY_LENGTH),
+                    failedPage = null,
+                    error = null,
+                ),
+            )
+        }
+    }
+
+    fun submitOpacSearch() {
+        val query = _uiState.value.opacSearch.searchQuery.trim()
+        if (query.isEmpty()) {
+            _uiState.update { state ->
+                state.copy(
+                    opacSearch = state.opacSearch.copy(
+                        error = UiText.Resource(R.string.opac_search_query_required),
+                    ),
+                )
+            }
+            return
+        }
+        _uiState.update { state ->
+            state.copy(
+                opacSearch = state.opacSearch.copy(
+                    searchQuery = query,
+                    appliedSearchQuery = query,
+                ),
+            )
+        }
+        loadOpacSearch(query = query, page = FIRST_PAGE, reset = true)
+    }
+
+    fun retryOpacSearch() {
+        val opacSearch = _uiState.value.opacSearch
+        val query = opacSearch.appliedSearchQuery
+            .takeIf(String::isNotBlank)
+            ?: opacSearch.searchQuery.trim()
+        if (query.isEmpty()) {
+            submitOpacSearch()
+            return
+        }
+        val retryPage = opacSearch.failedPage
+            ?.takeIf { page -> opacSearch.books.isNotEmpty() && page > 0 }
+        loadOpacSearch(
+            query = query,
+            page = retryPage ?: FIRST_PAGE,
+            reset = retryPage == null,
+        )
+    }
+
+    fun loadNextOpacPage() {
+        val opacSearch = _uiState.value.opacSearch
+        if (!opacSearch.canLoadMore || opacSearch.appliedSearchQuery.isBlank()) {
+            return
+        }
+        loadOpacSearch(
+            query = opacSearch.appliedSearchQuery,
+            page = opacSearch.page + 1,
+            reset = false,
+        )
+    }
+
+    private fun loadOpacSearch(
+        query: String,
+        page: Int,
+        reset: Boolean,
+    ) {
+        val current = _uiState.value
+        if (current.stage != AppStage.AUTHENTICATED) {
+            return
+        }
+        if (!reset && (current.opacSearch.isLoading || current.opacSearch.isLoadingMore)) {
+            return
+        }
+        val requestId = ++opacRequestId
+        if (reset) {
+            opacJob?.cancel()
+        }
+        val generation = sessionGeneration
+        _uiState.update { state ->
+            state.copy(
+                opacSearch = if (reset) {
+                    state.opacSearch.copy(
+                        appliedSearchQuery = query,
+                        books = emptyList(),
+                        page = 0,
+                        totalPages = 0,
+                        total = 0,
+                        isFirstPage = true,
+                        isLastPage = true,
+                        failedPage = null,
+                        hasSearched = true,
+                        isLoading = true,
+                        isLoadingMore = false,
+                        error = null,
+                    )
+                } else {
+                    state.opacSearch.copy(
+                        isLoadingMore = true,
+                        failedPage = null,
+                        error = null,
+                    )
+                },
+            )
+        }
+        opacJob = viewModelScope.launch {
+            val result = searchOpac(query, page)
+            if (requestId != opacRequestId || !isCurrentSession(generation)) {
+                return@launch
+            }
+            when (result) {
+                is OpacSearchResult.Success -> {
+                    val books = if (reset) {
+                        result.page.items
+                    } else {
+                        val currentBooks = _uiState.value.opacSearch.books
+                        withContext(opacMergeDispatcher) {
+                            appendDistinctOpacBooks(
+                                current = currentBooks,
+                                incoming = result.page.items,
+                            )
+                        }
+                    }
+                    if (requestId != opacRequestId || !isCurrentSession(generation)) {
+                        return@launch
+                    }
+                    _uiState.update { state ->
+                        if (requestId != opacRequestId || !isCurrentSession(generation)) {
+                            state
+                        } else {
+                            state.copy(
+                                opacSearch = state.opacSearch.copy(
+                                    books = books,
+                                    page = result.page.page,
+                                    totalPages = result.page.totalPages,
+                                    total = result.page.total,
+                                    isFirstPage = result.page.isFirstPage,
+                                    isLastPage = result.page.isLastPage,
+                                    failedPage = null,
+                                    hasSearched = true,
+                                    isLoading = false,
+                                    isLoadingMore = false,
+                                    error = null,
+                                ),
+                            )
+                        }
+                    }
+                }
+
+                is OpacSearchResult.Failure -> {
+                    updateOpacSearchFailure(
+                        requestId = requestId,
+                        generation = generation,
+                        failedPage = page,
+                        error = result.toUiText(),
+                    )
+                }
+            }
+        }
+    }
+
+    private fun updateOpacSearchFailure(
+        requestId: Long,
+        generation: Long,
+        failedPage: Int,
+        error: UiText,
+    ) {
+        if (requestId != opacRequestId || !isCurrentSession(generation)) {
+            return
+        }
+        _uiState.update { state ->
+            state.copy(
+                opacSearch = state.opacSearch.copy(
+                    isLoading = false,
+                    isLoadingMore = false,
+                    failedPage = failedPage,
+                    error = error,
+                ),
+            )
         }
     }
 
@@ -2497,12 +2724,14 @@ class ReservationViewModel(
         roomDetailJob?.cancel()
         bookingJob?.cancel()
         reservationsJob?.cancel()
+        opacJob?.cancel()
         cancellationJobs.values.forEach { job -> job.cancel() }
         cancellationJobs.clear()
         scannerJob?.cancel()
         roomRequestId++
         detailRequestId++
         reservationRequestId++
+        opacRequestId++
         scannerRequestId++
     }
 
@@ -2553,6 +2782,14 @@ class ReservationViewModel(
         ApiErrorKind.VALIDATION,
         ApiErrorKind.UNKNOWN,
         -> ReaderQrCodeFailure.INVALID_RESPONSE
+    }
+
+    private fun OpacSearchResult.Failure.toUiText(): UiText = when (reason) {
+        OpacSearchFailure.NETWORK -> UiText.Resource(R.string.error_network)
+        OpacSearchFailure.HTTP -> UiText.Resource(R.string.error_http)
+        OpacSearchFailure.TLS,
+        OpacSearchFailure.INVALID_RESPONSE,
+        -> UiText.Resource(R.string.error_response)
     }
 
     private fun CookieCloudFailureReason.toUiText(): UiText.Resource =
@@ -2615,6 +2852,7 @@ class ReservationViewModel(
     class Factory(
         private val repository: ReservationRepository,
         private val readerQrCodeRepository: ReaderQrCodeRepository,
+        private val opacRepository: OpacRepository,
         private val locationProvider: DeviceLocationProvider,
         private val shouldUseMockLocation: () -> Boolean,
         private val queueCalendarReminder: suspend (
@@ -2630,6 +2868,7 @@ class ReservationViewModel(
                 return ReservationViewModel(
                     repository = repository,
                     readerQrCodeRepository = readerQrCodeRepository,
+                    opacRepository = opacRepository,
                     locationProvider = locationProvider,
                     shouldUseMockLocation = shouldUseMockLocation,
                     queueCalendarReminder = queueCalendarReminder,
@@ -2643,6 +2882,7 @@ class ReservationViewModel(
         const val FIRST_PAGE = 1
         const val ROOM_PAGE_SIZE = 20
         const val RESERVATION_PAGE_SIZE = 10
+        const val OPAC_MAX_QUERY_LENGTH = 200
         const val MAX_NAME_LENGTH = 20
         const val CANNOT_SIGN_VALUE = 0
         const val MIN_SMS_CODE_LENGTH = 4
@@ -2659,4 +2899,24 @@ class ReservationViewModel(
         fun isValidMobile(value: String): Boolean =
             MOBILE_PATTERN.matches(value.trim())
     }
+}
+
+internal fun appendDistinctOpacBooks(
+    current: List<OpacBook>,
+    incoming: List<OpacBook>,
+): List<OpacBook> {
+    val expectedSize = current.size + incoming.size
+    val seenIds = HashSet<String>(expectedSize)
+    val merged = ArrayList<OpacBook>(expectedSize)
+    current.forEach { book ->
+        if (seenIds.add(book.id)) {
+            merged += book
+        }
+    }
+    incoming.forEach { book ->
+        if (seenIds.add(book.id)) {
+            merged += book
+        }
+    }
+    return merged
 }
